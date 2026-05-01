@@ -16,4 +16,7 @@ const val ROUT_Profile = "Profile"
 const val ROUT_DiscoveryFeed = "DiscoveryFeed"
 const val ROUT_EditProject = "EditProject"
 const val ROUT_Collaboration = "Collaboration"
+const val ROUT_PublicProfile = "PublicProfile"
+const val ROUT_Notification = "Notification"
+const val ROUT_PitchView= "PitchView"
 

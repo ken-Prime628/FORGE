@@ -1,124 +1,314 @@
 package com.kennedy.forge.ui.screens.onboarding
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.kennedy.forge.R
-import com.kennedy.forge.navigation.ROUTE_Register
 import com.kennedy.forge.navigation.ROUT_ProfileSetup
-import com.kennedy.forge.ui.screens.components.Indicator
 import com.kennedy.forge.ui.theme.*
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Design Direction: The final screen is the payoff — the glow is centred and
+// stronger, the CTA is full-width and bold, and the text builds to a crescendo.
+// No Skip. No Back. Just momentum forward.
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-fun OnboardingScreen3(navController: NavController){
+fun OnboardingScreen3(navController: NavController) {
+
+    val infiniteTransition = rememberInfiniteTransition(label = "glow3")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.20f,
+        targetValue = 0.42f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha3"
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // 🖼️ BACKGROUND IMAGE
+        // ── LAYER 1: Background image ─────────────────────────────────────────
         Image(
-            painter = painterResource(id = R.drawable.onboarding3), // 🔥 Add your image
+            painter = painterResource(id = R.drawable.onboarding3),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
 
-        // 🌫️ DARK OVERLAY FOR READABILITY
+        // ── LAYER 2: Vignette — heavier than screens 1 & 2 for dramatic close ─
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.6f)
+                        colorStops = arrayOf(
+                            0.0f to Color.Black.copy(alpha = 0.30f),
+                            0.30f to Color.Black.copy(alpha = 0.15f),
+                            0.55f to Color.Black.copy(alpha = 0.65f),
+                            1.0f to Color(0xFF0A0805).copy(alpha = 0.98f)
                         )
                     )
                 )
         )
 
-        // 📄 CONTENT
+        // ── LAYER 3: Centred gold glow — bigger, brighter, climactic ──────────
+        Box(
+            modifier = Modifier
+                .size(380.dp)
+                .align(Alignment.BottomCenter)
+                .offset(y = 80.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            GoldAccent.copy(alpha = glowAlpha),
+                            GoldDeep.copy(alpha = glowAlpha * 0.4f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .blur(70.dp)
+        )
+
+        // ── LAYER 4: UI ───────────────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(horizontal = 28.dp)
+                .padding(top = 56.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
 
-            // 🔼 TOP (EMPTY / CLEAN)
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 🧠 MAIN TEXT (POWERFUL CLOSE)
-            Column {
-
-                Text(
-                    text = "Turn Your Talent Into Impact",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "Forge empowers you to refine your skills, showcase your work, and connect with a community that pushes you to grow. Build a portfolio, receive expert-level feedback, and transform your creativity into real-world success.\n\nThis is where your journey evolves from learning to mastery.",
-                    color = Color.White.copy(alpha = 0.9f)
-                )
-            }
-
-            // 🔽 BOTTOM SECTION
-            Column {
-
-                // 🔘 Indicator (3rd screen)
-                Indicator(current = 3)
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // 🚀 GET STARTED BUTTON (MAIN ACTION)
-                Button(
-                    onClick = {
-                        navController.navigate(ROUT_ProfileSetup)
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = GoldPrimary
-                    ),
-                    shape = RoundedCornerShape(14.dp),
+            // ── TOP BAR — wordmark only, no skip on last screen ───────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(55.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.10f))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "Get Started",
-                        color = TextOnDark,
-                        fontWeight = FontWeight.Bold
+                        text = "FORGE",
+                        color = GoldAccent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.W700,
+                        letterSpacing = 4.sp
+                    )
+                }
+            }
+
+            // ── MAIN CONTENT ──────────────────────────────────────────────────
+            Column(modifier = Modifier.fillMaxWidth()) {
+
+                // Eyebrow
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .width(24.dp)
+                            .height(1.5.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(GoldPrimary, GoldAccent)
+                                )
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "YOUR JOURNEY BEGINS",
+                        color = GoldAccent,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.W600,
+                        letterSpacing = 3.sp
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
+                // Headline — three lines for dramatic delivery
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(
+                            SpanStyle(
+                                color = TextOnDark,
+                                fontSize = 42.sp,
+                                fontWeight = FontWeight.W800,
+                                letterSpacing = (-1).sp
+                            )
+                        ) { append("Turn Talent\nInto ") }
+                        withStyle(
+                            SpanStyle(
+                                brush = Brush.linearGradient(
+                                    listOf(GoldAccent, GoldPrimary, GoldDeep)
+                                ),
+                                fontSize = 42.sp,
+                                fontWeight = FontWeight.W800,
+                                letterSpacing = (-1).sp
+                            )
+                        ) { append("Impact") }
+                    }
+                )
 
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Decorative rule
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.35f)
+                        .height(1.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(GoldDeep.copy(alpha = 0.7f), Color.Transparent)
+                            )
+                        )
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Body copy — split into two intentional beats
+                Text(
+                    text = "Build a portfolio, receive expert-level feedback, and connect with a community that pushes you to grow.",
+                    color = TextOnDark.copy(alpha = 0.72f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.W400,
+                    lineHeight = 22.sp,
+                    letterSpacing = 0.1.sp
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "From learning to mastery — this is where it happens.",
+                    color = SoftOlive.copy(alpha = 0.85f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.W300,
+                    lineHeight = 20.sp,
+                    letterSpacing = 0.2.sp
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // ── BOTTOM CONTROLS ───────────────────────────────────────────
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+
+                    // Dot indicators — third dot active
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            repeat(2) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(TextOnDark.copy(alpha = 0.25f))
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .width(22.dp)
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(GoldAccent, GoldPrimary)
+                                        )
+                                    )
+                            )
+                        }
+                    }
+
+                    // Full-width GET STARTED — gold gradient, rich and confident
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(GoldAccent, GoldPrimary, GoldDeep)
+                                )
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { navController.navigate(ROUT_ProfileSetup) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = "Get Started",
+                                color = DarkSurface,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.W800,
+                                letterSpacing = 0.5.sp
+                            )
+                            Text(
+                                text = "✦",
+                                color = DarkSurface.copy(alpha = 0.65f),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    // Legal / already have account nudge
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "By continuing, you agree to our Terms & Privacy Policy",
+                            color = TextOnDark.copy(alpha = 0.30f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.W300,
+                            letterSpacing = 0.2.sp
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
 fun OnboardingScreen3Preview() {
     OnboardingScreen3(rememberNavController())

@@ -19,4 +19,7 @@ const val ROUT_Collaboration = "Collaboration"
 const val ROUT_PublicProfile = "PublicProfile"
 const val ROUT_Notification = "Notification"
 const val ROUT_PitchView= "PitchView"
+const val ROUT_Search= "Search"
+const val ROUT_Payments= "Payments"
+const val ROUT_Security= "Security"
 

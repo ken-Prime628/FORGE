@@ -13,10 +13,13 @@ import com.kennedy.forge.ui.screens.community.DiscoveryFeedScreen
 import com.kennedy.forge.ui.screens.community.PublicProfileScreen
 import com.kennedy.forge.ui.screens.dashboard.DashboardScreen
 import com.kennedy.forge.ui.screens.dashboard.NotificationScreen
+import com.kennedy.forge.ui.screens.dashboard.SearchScreen
 import com.kennedy.forge.ui.screens.feedback.EditProjectScreen
 import com.kennedy.forge.ui.screens.feedback.FeedbackDashboardScreen
 import com.kennedy.forge.ui.screens.feedback.SubmitWorkScreen
 import com.kennedy.forge.ui.screens.feedback.ProjectDetailScreen
+import com.kennedy.forge.ui.screens.growth.PaymentScreen
+import com.kennedy.forge.ui.screens.growth.SecurityScreen
 import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen1
 import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen2
 import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen3
@@ -105,8 +108,19 @@ fun AppNavHost(
         composable(ROUT_PitchView) {
             PitchViewScreen(navController)
         }
+        composable(ROUT_Search) {
+            SearchScreen(navController)
+        }
+        composable(ROUT_Payments ){
+            PaymentScreen(navController)
+        }
+        composable(ROUT_Security ){
+            SecurityScreen(navController)
+        }
+
+    }
+
 
 
 
     }
-}

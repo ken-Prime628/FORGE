@@ -22,4 +22,7 @@ const val ROUT_PitchView= "PitchView"
 const val ROUT_Search= "Search"
 const val ROUT_Payments= "Payments"
 const val ROUT_Security= "Security"
+const val ROUT_GrowthInsight= "GrowthInsight"
+const val ROUT_PortfolioBuilder= "PortfolioBuilder"
+const val ROUT_BlockDiagnosis= "BlockDiagnosis"
 

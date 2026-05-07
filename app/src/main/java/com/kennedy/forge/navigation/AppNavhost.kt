@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kennedy.forge.ui.screens.auth.LoginScreen
 import com.kennedy.forge.ui.screens.auth.RegisterScreen
+import com.kennedy.forge.ui.screens.blockbreaker.BlockDiagnosisScreen
 import com.kennedy.forge.ui.screens.community.CollaborationScreen
 import com.kennedy.forge.ui.screens.community.DiscoveryFeedScreen
 import com.kennedy.forge.ui.screens.community.PublicProfileScreen
@@ -18,6 +19,7 @@ import com.kennedy.forge.ui.screens.feedback.EditProjectScreen
 import com.kennedy.forge.ui.screens.feedback.FeedbackDashboardScreen
 import com.kennedy.forge.ui.screens.feedback.SubmitWorkScreen
 import com.kennedy.forge.ui.screens.feedback.ProjectDetailScreen
+import com.kennedy.forge.ui.screens.growth.GrowthInsightScreen
 import com.kennedy.forge.ui.screens.growth.PaymentScreen
 import com.kennedy.forge.ui.screens.growth.SecurityScreen
 import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen1
@@ -26,6 +28,7 @@ import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen3
 import com.kennedy.forge.ui.screens.onboarding.ProfileSetupScreen
 import com.kennedy.forge.ui.screens.onboarding.SkillAssessmentScreen
 import com.kennedy.forge.ui.screens.pitch.PitchViewScreen
+import com.kennedy.forge.ui.screens.portfolio.PortfolioBuilderScreen
 import com.kennedy.forge.ui.screens.profile.ProfileScreen
 import com.kennedy.forge.ui.screens.splash.SplashScreen
 
@@ -116,6 +119,15 @@ fun AppNavHost(
         }
         composable(ROUT_Security ){
             SecurityScreen(navController)
+        }
+        composable(ROUT_GrowthInsight ){
+            GrowthInsightScreen(navController)
+        }
+        composable(ROUT_PortfolioBuilder ){
+            PortfolioBuilderScreen(navController)
+        }
+        composable(ROUT_BlockDiagnosis ){
+            BlockDiagnosisScreen(navController)
         }
 
     }

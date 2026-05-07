@@ -34,6 +34,7 @@ import androidx.navigation.compose.rememberNavController
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.database.database
+import com.kennedy.forge.navigation.ROUTE_Login
 import com.kennedy.forge.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -328,7 +329,12 @@ fun RegisterScreen(navController: NavController) {
                                             isLoading = false
                                             result.fold(
                                                 onSuccess = {
-                                                    navController.navigate("home") {
+                                                    // ✅ Account created — send user to login screen.
+                                                    // popUpTo("register") removes the register screen from
+                                                    // the back stack so pressing Back on the login screen
+                                                    // does NOT return to register (and does NOT close the app
+                                                    // if there are screens behind register, e.g. onboarding).
+                                                    navController.navigate("login") {
                                                         popUpTo("register") { inclusive = true }
                                                     }
                                                 },
@@ -367,7 +373,7 @@ fun RegisterScreen(navController: NavController) {
                             color      = GoldPrimary,
                             fontWeight = FontWeight.W600
                         ),
-                        modifier = Modifier.clickable { navController.navigate("login") }
+                        modifier = Modifier.clickable { navController.navigate(ROUTE_Login) }
                     )
                 }
 

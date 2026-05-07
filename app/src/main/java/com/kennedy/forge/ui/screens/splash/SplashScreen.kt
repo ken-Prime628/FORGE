@@ -17,6 +17,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.kennedy.forge.R
+import com.kennedy.forge.navigation.ROUTE_Register
+import com.kennedy.forge.navigation.ROUTE_SPLASH
+import com.kennedy.forge.navigation.ROUT_ONBOARDING1
 import com.kennedy.forge.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -55,8 +58,8 @@ fun SplashScreen(navController: NavController) {
         startAnimation = true
         delay(2200)
 
-        navController.navigate("register") {
-            popUpTo("splash") { inclusive = true }
+        navController.navigate(ROUT_ONBOARDING1) {
+            popUpTo(ROUTE_SPLASH) { inclusive = true }
         }
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.kennedy.forge.navigation.ROUT_Dashboard
 
 // ─── Colour Tokens ───────────────────────────────────────────────────────────
 
@@ -160,7 +161,7 @@ fun SkillAssessmentScreen(navController: NavController) {
             selectedLevels = selectedLevels.toList(),
             onConfirm = {
                 if (selectedLevels.size == MAX_SELECTIONS) {
-                    navController.navigate("dashboard") {
+                    navController.navigate(ROUT_Dashboard) {
                         popUpTo("skill_assessment") { inclusive = true }
                     }
                 }

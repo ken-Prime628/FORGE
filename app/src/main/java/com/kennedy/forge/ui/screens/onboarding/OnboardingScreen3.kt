@@ -27,14 +27,10 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.kennedy.forge.R
+import com.kennedy.forge.navigation.ROUTE_Register
+import com.kennedy.forge.navigation.ROUT_ONBOARDING1
 import com.kennedy.forge.navigation.ROUT_ProfileSetup
 import com.kennedy.forge.ui.theme.*
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Design Direction: The final screen is the payoff — the glow is centred and
-// stronger, the CTA is full-width and bold, and the text builds to a crescendo.
-// No Skip. No Back. Just momentum forward.
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun OnboardingScreen3(navController: NavController) {
@@ -52,7 +48,6 @@ fun OnboardingScreen3(navController: NavController) {
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // ── LAYER 1: Background image ─────────────────────────────────────────
         Image(
             painter = painterResource(id = R.drawable.onboarding3),
             contentDescription = null,
@@ -60,7 +55,6 @@ fun OnboardingScreen3(navController: NavController) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // ── LAYER 2: Vignette — heavier than screens 1 & 2 for dramatic close ─
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -76,7 +70,6 @@ fun OnboardingScreen3(navController: NavController) {
                 )
         )
 
-        // ── LAYER 3: Centred gold glow — bigger, brighter, climactic ──────────
         Box(
             modifier = Modifier
                 .size(380.dp)
@@ -95,7 +88,6 @@ fun OnboardingScreen3(navController: NavController) {
                 .blur(70.dp)
         )
 
-        // ── LAYER 4: UI ───────────────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -104,7 +96,6 @@ fun OnboardingScreen3(navController: NavController) {
             verticalArrangement = Arrangement.SpaceBetween
         ) {
 
-            // ── TOP BAR — wordmark only, no skip on last screen ───────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Start
@@ -125,10 +116,8 @@ fun OnboardingScreen3(navController: NavController) {
                 }
             }
 
-            // ── MAIN CONTENT ──────────────────────────────────────────────────
             Column(modifier = Modifier.fillMaxWidth()) {
 
-                // Eyebrow
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -152,7 +141,6 @@ fun OnboardingScreen3(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Headline — three lines for dramatic delivery
                 Text(
                     text = buildAnnotatedString {
                         withStyle(
@@ -178,7 +166,6 @@ fun OnboardingScreen3(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Decorative rule
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.35f)
@@ -192,14 +179,11 @@ fun OnboardingScreen3(navController: NavController) {
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Body copy — split into two intentional beats
                 Text(
                     text = "Build a portfolio, receive expert-level feedback, and connect with a community that pushes you to grow.",
                     color = TextOnDark.copy(alpha = 0.72f),
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.W400,
-                    lineHeight = 22.sp,
-                    letterSpacing = 0.1.sp
+                    lineHeight = 22.sp
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -207,30 +191,21 @@ fun OnboardingScreen3(navController: NavController) {
                 Text(
                     text = "From learning to mastery — this is where it happens.",
                     color = SoftOlive.copy(alpha = 0.85f),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.W300,
-                    lineHeight = 20.sp,
-                    letterSpacing = 0.2.sp
+                    fontSize = 13.sp
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // ── BOTTOM CONTROLS ───────────────────────────────────────────
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
 
-                    // Dot indicators — third dot active
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             repeat(2) {
                                 Box(
                                     modifier = Modifier
@@ -253,7 +228,9 @@ fun OnboardingScreen3(navController: NavController) {
                         }
                     }
 
-                    // Full-width GET STARTED — gold gradient, rich and confident
+                    ///////////////////////////////////////////////////////
+                    // ✅ FIXED NAVIGATION BUTTON
+                    ///////////////////////////////////////////////////////
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -267,29 +244,24 @@ fun OnboardingScreen3(navController: NavController) {
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) { navController.navigate(ROUT_ProfileSetup) },
+                            ) {
+                                navController.navigate(ROUTE_Register) {
+                                    popUpTo(ROUT_ONBOARDING1) {
+                                        inclusive = true
+                                    }
+                                    launchSingleTop = true
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Text(
-                                text = "Get Started",
-                                color = DarkSurface,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.W800,
-                                letterSpacing = 0.5.sp
-                            )
-                            Text(
-                                text = "✦",
-                                color = DarkSurface.copy(alpha = 0.65f),
-                                fontSize = 12.sp
-                            )
-                        }
+                        Text(
+                            text = "Get Started",
+                            color = DarkSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
-                    // Legal / already have account nudge
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center
@@ -297,9 +269,7 @@ fun OnboardingScreen3(navController: NavController) {
                         Text(
                             text = "By continuing, you agree to our Terms & Privacy Policy",
                             color = TextOnDark.copy(alpha = 0.30f),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.W300,
-                            letterSpacing = 0.2.sp
+                            fontSize = 11.sp
                         )
                     }
                 }
@@ -308,7 +278,7 @@ fun OnboardingScreen3(navController: NavController) {
     }
 }
 
-@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Preview(showBackground = true)
 @Composable
 fun OnboardingScreen3Preview() {
     OnboardingScreen3(rememberNavController())

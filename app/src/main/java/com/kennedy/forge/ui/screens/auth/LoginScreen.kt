@@ -34,6 +34,11 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.kennedy.forge.navigation.ROUTE_Login
+import com.kennedy.forge.navigation.ROUTE_Register
+import com.kennedy.forge.navigation.ROUT_ONBOARDING1
+import com.kennedy.forge.navigation.ROUT_ProfileSetup
+import com.kennedy.forge.navigation.ROUT_SkillAssessment
 import com.kennedy.forge.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -224,7 +229,7 @@ fun LoginScreen(navController: NavController) {
 
                         Spacer(Modifier.height(20.dp))
 
-                        // ── SIGN IN — calls Firebase ──────────────────
+                        // ── SIGN IN — calls Firebase, then goes to onboarding ──
                         LoginButton(
                             isLoading = isLoading,
                             onClick   = {
@@ -236,8 +241,13 @@ fun LoginScreen(navController: NavController) {
                                             isLoading = false
                                             result.fold(
                                                 onSuccess = {
-                                                    navController.navigate("home") {
-                                                        popUpTo("login") { inclusive = true }
+                                                    // ✅ FIX 1: navigate to onboarding screen 1.
+                                                    // popUpTo("login") { inclusive = true } removes the
+                                                    // login screen from the back stack so the user
+                                                    // can't press Back to return to it.
+                                                    navController.navigate(ROUT_SkillAssessment) {
+                                                        popUpTo(ROUTE_Login) { inclusive = true }
+                                                        launchSingleTop = true
                                                     }
                                                 },
                                                 onFailure = { e ->
@@ -282,7 +292,7 @@ fun LoginScreen(navController: NavController) {
                             color      = GoldPrimary,
                             fontWeight = FontWeight.W600
                         ),
-                        modifier = Modifier.clickable { navController.navigate("register") }
+                        modifier = Modifier.clickable { navController.navigate(ROUTE_Register) }
                     )
                 }
 
@@ -518,7 +528,7 @@ private fun AuthFieldDivider() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  LOGIN BUTTON  (unchanged)
+//  LOGIN BUTTON  — ✅ FIX 2: onClick = {} replaced with onClick = onClick
 // ─────────────────────────────────────────────────────────────────
 @Composable
 private fun LoginButton(isLoading: Boolean, onClick: () -> Unit) {
@@ -543,7 +553,8 @@ private fun LoginButton(isLoading: Boolean, onClick: () -> Unit) {
             .clickable(
                 interactionSource = interactionSource,
                 indication        = ripple(color = DarkSurface.copy(alpha = 0.15f)),
-                onClick           = {} ,
+                // ✅ was onClick = {} — button never fired. Now correctly wired.
+                onClick           = onClick,
                 enabled           = !isLoading
             ),
         contentAlignment = Alignment.Center

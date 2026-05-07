@@ -29,6 +29,7 @@ import coil.compose.AsyncImage
 import com.kennedy.forge.R
 import com.kennedy.forge.ui.theme.*
 import androidx.compose.ui.tooling.preview.Preview
+import com.kennedy.forge.navigation.ROUT_DiscoveryFeed
 import com.kennedy.forge.navigation.ROUT_ProfileSetup
 import com.kennedy.forge.navigation.ROUT_SubmitWork
 
@@ -208,6 +209,7 @@ fun DashboardTopBar(
                             Icons.Default.Notifications, null,
                             tint     = TextPrimary,
                             modifier = Modifier.size(18.dp).align(Alignment.Center)
+
                         )
                         Box(
                             Modifier
@@ -780,7 +782,7 @@ fun ForgeBottomNavigation(navController: NavController) {
             icon     = { Icon(Icons.Default.Search, null) },
             label    = { Text("Discover", style = MaterialTheme.typography.labelSmall) },
             selected = false,
-            onClick  = { navController.navigate("discovery_feed") }
+            onClick  = { navController.navigate(ROUT_DiscoveryFeed) }
         )
         // Gold centre add button
         NavigationBarItem(

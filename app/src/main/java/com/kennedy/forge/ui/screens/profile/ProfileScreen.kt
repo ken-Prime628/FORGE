@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -69,8 +68,8 @@ import androidx.compose.ui.tooling.preview.Preview
 // ─────────────────────────────────────────────
 
 private object CloudinaryConfig {
-    const val CLOUD_NAME    = "YOUR_CLOUD_NAME"
-    const val UPLOAD_PRESET = "YOUR_UPLOAD_PRESET"
+    const val CLOUD_NAME    = "dv4sidtxo"      // ← replace with your real cloud name
+    const val UPLOAD_PRESET = "forge_portfolio"   // ← replace with your real upload preset
     val UPLOAD_URL get() = "https://api.cloudinary.com/v1_1/$CLOUD_NAME/image/upload"
 }
 
@@ -109,33 +108,33 @@ data class UserProfile(
 
 val demoProjects = listOf(
     Project(
-        title = "Forge Landing Page",
+        title       = "Forge Landing Page",
         description = "A sleek, animated landing page built for the Forge platform launch.",
-        category = "Web Design",
-        likes = 142,
-        image = R.drawable.hero_bg,
-        isNew = true
+        category    = "Web Design",
+        likes       = 142,
+        image       = R.drawable.hero_bg,
+        isNew       = true
     ),
     Project(
-        title = "Artisan UI Kit",
+        title       = "Artisan UI Kit",
         description = "A premium component library for crafting refined digital experiences.",
-        category = "UI/UX",
-        likes = 89,
-        image = R.drawable.hero_bg
+        category    = "UI/UX",
+        likes       = 89,
+        image       = R.drawable.hero_bg
     ),
     Project(
-        title = "Portfolio 2025",
+        title       = "Portfolio 2025",
         description = "My personal portfolio showcasing motion design and development work.",
-        category = "Portfolio",
-        likes = 203,
-        image = R.drawable.hero_bg
+        category    = "Portfolio",
+        likes       = 203,
+        image       = R.drawable.hero_bg
     )
 )
 
 val demoAchievements = listOf(
-    Achievement(Icons.Default.Star, "Top Creator", GoldPrimary),
-    Achievement(Icons.Default.Favorite, "100+ Likes", SoftPeach),
-    Achievement(Icons.Default.CheckCircle, "Verified", SoftGreen)
+    Achievement(Icons.Default.Star,        "Top Creator", GoldPrimary),
+    Achievement(Icons.Default.Favorite,    "100+ Likes",  SoftPeach),
+    Achievement(Icons.Default.CheckCircle, "Verified",    SoftGreen)
 )
 
 // ─────────────────────────────────────────────
@@ -150,7 +149,7 @@ suspend fun uploadAvatarToCloudinary(context: Context, imageUri: Uri): Result<St
                 FileOutputStream(tempFile).use { output -> input.copyTo(output) }
             } ?: error("Could not open image stream")
 
-            val client = OkHttpClient()
+            val client      = OkHttpClient()
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file", tempFile.name, tempFile.asRequestBody("image/*".toMediaType()))
@@ -158,13 +157,9 @@ suspend fun uploadAvatarToCloudinary(context: Context, imageUri: Uri): Result<St
                 .addFormDataPart("folder", "forge/avatars")
                 .build()
 
-            val request = Request.Builder()
-                .url(CloudinaryConfig.UPLOAD_URL)
-                .post(requestBody)
-                .build()
-
+            val request  = Request.Builder().url(CloudinaryConfig.UPLOAD_URL).post(requestBody).build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: error("Empty response from Cloudinary")
+            val body     = response.body?.string() ?: error("Empty response from Cloudinary")
             if (!response.isSuccessful) error("Cloudinary upload failed (${response.code}): $body")
             JSONObject(body).getString("secure_url")
         }
@@ -172,49 +167,42 @@ suspend fun uploadAvatarToCloudinary(context: Context, imageUri: Uri): Result<St
 
 suspend fun saveProfileToDatabase(profile: UserProfile): Result<Unit> = runCatching {
     Firebase.database.reference
-        .child("users")
-        .child(profile.uid)
-        .child("profile")
-        .setValue(profile)
-        .await()
+        .child("users").child(profile.uid).child("profile")
+        .setValue(profile).await()
 }
 
 suspend fun loadProfileFromDatabase(uid: String): Result<UserProfile> = runCatching {
-    val snapshot = Firebase.database.reference
-        .child("users")
-        .child(uid)
-        .child("profile")
-        .get()
-        .await()
+    val snap = Firebase.database.reference
+        .child("users").child(uid).child("profile")
+        .get().await()
     UserProfile(
-        uid        = snapshot.child("uid").getValue(String::class.java) ?: uid,
-        name       = snapshot.child("name").getValue(String::class.java) ?: "",
-        profession = snapshot.child("profession").getValue(String::class.java) ?: "",
-        category   = snapshot.child("category").getValue(String::class.java) ?: "",
-        bio        = snapshot.child("bio").getValue(String::class.java) ?: "",
-        avatarUrl  = snapshot.child("avatarUrl").getValue(String::class.java) ?: "",
-        updatedAt  = snapshot.child("updatedAt").getValue(Long::class.java) ?: System.currentTimeMillis()
+        uid        = snap.child("uid").getValue(String::class.java)        ?: uid,
+        name       = snap.child("name").getValue(String::class.java)       ?: "",
+        profession = snap.child("profession").getValue(String::class.java) ?: "",
+        category   = snap.child("category").getValue(String::class.java)   ?: "",
+        bio        = snap.child("bio").getValue(String::class.java)        ?: "",
+        avatarUrl  = snap.child("avatarUrl").getValue(String::class.java)  ?: "",
+        updatedAt  = snap.child("updatedAt").getValue(Long::class.java)    ?: System.currentTimeMillis()
     )
 }
 
 // ─────────────────────────────────────────────
-// PROFILE SCREEN (COMBINED)
+// PROFILE SCREEN
 // ─────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(navController: NavController) {
 
-    val context   = LocalContext.current
-    val scope     = rememberCoroutineScope()
-    val isPreview = LocalInspectionMode.current
+    val context = LocalContext.current
+    val scope   = rememberCoroutineScope()
 
-    // ── Live profile state loaded from Firebase ──────────────────
-    var profile       by remember { mutableStateOf(UserProfile()) }
-    var isLoading     by remember { mutableStateOf(true) }
-    var loadError     by remember { mutableStateOf("") }
+    // ── Profile state ─────────────────────────────────────────────
+    var profile   by remember { mutableStateOf(UserProfile()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf("") }
 
-    // ── Update-profile bottom sheet state ────────────────────────
+    // ── Edit-sheet state ──────────────────────────────────────────
     var showUpdateSheet    by remember { mutableStateOf(false) }
     var editName           by remember { mutableStateOf("") }
     var editProfession     by remember { mutableStateOf("") }
@@ -231,53 +219,69 @@ fun ProfileScreen(navController: NavController) {
     val userProjects = demoProjects
     val totalLikes   = userProjects.sumOf { it.likes }
 
-    // ── Camera / Gallery launchers ───────────────────────────────
-    val cameraUri: Uri = if (isPreview) Uri.EMPTY else remember {
-        val file = File(context.cacheDir, "forge_avatar_${System.currentTimeMillis()}.jpg")
-        FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-    }
+    // ── FIX: camera URI is null until the user actually taps camera ──
+    // Previously, FileProvider.getUriForFile() ran immediately on first
+    // composition — before the screen even rendered — causing a crash if
+    // the <provider> authority didn't match or the manifest was missing it.
+    // Now we create the URI lazily, only at the moment the camera launches.
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
-    ) { success -> if (success) editAvatarUri = cameraUri }
+    ) { success ->
+        if (success) editAvatarUri = cameraUri
+    }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? -> uri?.let { editAvatarUri = it } }
 
+    // Helper called when user taps "Take a photo"
+    fun launchCamera() {
+        val file = File(context.cacheDir, "forge_avatar_${System.currentTimeMillis()}.jpg")
+        val uri  = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        cameraUri = uri
+        cameraLauncher.launch(uri)
+    }
+
     // ── Load profile on first composition ────────────────────────
     LaunchedEffect(Unit) {
+        // Firebase auth token may not be ready instantly — retry once
         val uid = Firebase.auth.currentUser?.uid
+            ?: run {
+                kotlinx.coroutines.delay(500)
+                Firebase.auth.currentUser?.uid
+            }
+
         if (uid == null) {
-            loadError = "Not signed in"
+            // User is not signed in — go back safely instead of showing blank screen
+            navController.navigate(ROUT_Dashboard) {
+                popUpTo(ROUT_Dashboard) { inclusive = false }
+                launchSingleTop = true
+            }
             isLoading = false
             return@LaunchedEffect
         }
+
         loadProfileFromDatabase(uid).fold(
-            onSuccess = { loaded ->
-                profile   = loaded
-                isLoading = false
-            },
-            onFailure = { e ->
-                loadError = e.message ?: "Failed to load profile"
-                isLoading = false
-            }
+            onSuccess = { loaded -> profile = loaded; isLoading = false },
+            onFailure = { e -> loadError = e.message ?: "Failed to load profile"; isLoading = false }
         )
     }
 
-    // ── Pre-fill edit form when sheet opens ───────────────────────
+    // ── Pre-fill edit form ────────────────────────────────────────
     fun openUpdateSheet() {
-        editName        = profile.name
-        editProfession  = profile.profession
-        editCategory    = profile.category
-        editBio         = profile.bio
-        editAvatarUri   = null
-        saveError       = ""
+        editName           = profile.name
+        editProfession     = profile.profession
+        editCategory       = profile.category
+        editBio            = profile.bio
+        editAvatarUri      = null
+        saveError          = ""
         showValidationHint = false
-        showUpdateSheet = true
+        showUpdateSheet    = true
     }
 
-    // ── Save updated profile ──────────────────────────────────────
+    // ── Save ──────────────────────────────────────────────────────
     fun handleSave() {
         if (!isFormValid) { showValidationHint = true; return }
         isSaving  = true
@@ -292,8 +296,7 @@ fun ProfileScreen(navController: NavController) {
 
             val avatarUrl: String = when {
                 editAvatarUri != null -> {
-                    val result = uploadAvatarToCloudinary(context, editAvatarUri!!)
-                    result.getOrElse { e ->
+                    uploadAvatarToCloudinary(context, editAvatarUri!!).getOrElse { e ->
                         withContext(Dispatchers.Main) {
                             isSaving  = false
                             saveError = "Photo upload failed: ${e.message}"
@@ -301,7 +304,7 @@ fun ProfileScreen(navController: NavController) {
                         return@launch
                     }
                 }
-                else -> profile.avatarUrl  // keep existing
+                else -> profile.avatarUrl
             }
 
             val updated = UserProfile(
@@ -331,31 +334,17 @@ fun ProfileScreen(navController: NavController) {
         }
     }
 
-    // ── Root scaffold ─────────────────────────────────────────────
+    // ── Scaffold ──────────────────────────────────────────────────
     Scaffold(
         containerColor = BackgroundMain,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text(
-                        "My Profile",
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp
-                    )
+                    Text("My Profile", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        navController.navigate(ROUT_Dashboard) {
-                            popUpTo(ROUT_Dashboard) { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = TextPrimary
-                        )
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 actions = {
@@ -368,7 +357,7 @@ fun ProfileScreen(navController: NavController) {
                             .padding(horizontal = 14.dp, vertical = 7.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment     = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(16.dp))
@@ -379,36 +368,33 @@ fun ProfileScreen(navController: NavController) {
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundMain)
             )
         },
-        // ── Bottom bar with Edit Profile icon ─────────────────────
         bottomBar = {
-            Surface(
-                tonalElevation = 4.dp,
-                color = BackgroundMain,
-                shadowElevation = 8.dp
-            ) {
+            Surface(tonalElevation = 4.dp, color = BackgroundMain, shadowElevation = 8.dp) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
                         .padding(horizontal = 32.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    // Home
                     BottomNavItem(
                         icon    = Icons.Default.Home,
                         label   = "Home",
                         tint    = TextSecondary,
-                        onClick = { navController.navigate(ROUT_Dashboard) }
+                        onClick = {
+                            navController.navigate(ROUT_Dashboard) {
+                                popUpTo(ROUT_Dashboard) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
                     )
-                    // Add Work
                     BottomNavItem(
                         icon    = Icons.Default.Add,
                         label   = "Submit",
                         tint    = TextSecondary,
                         onClick = { navController.navigate(ROUT_SubmitWork) }
                     )
-                    // Edit Profile — gold accent, calls update sheet
                     BottomNavItem(
                         icon    = Icons.Default.ManageAccounts,
                         label   = "Edit Profile",
@@ -437,48 +423,24 @@ fun ProfileScreen(navController: NavController) {
             }
             else -> {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentPadding = PaddingValues(bottom = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                    modifier       = Modifier.fillMaxSize().padding(padding),
+                    contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
-                    // ── HERO ────────────────────────────────────────
                     item { HeroSection(profile = profile) }
-
-                    // ── STATS ───────────────────────────────────────
-                    item {
-                        StatsRow(
-                            projects = userProjects.size,
-                            likes    = totalLikes,
-                            reviews  = 18
-                        )
-                    }
-
-                    // ── ACHIEVEMENTS ────────────────────────────────
+                    item { StatsRow(projects = userProjects.size, likes = totalLikes, reviews = 18) }
                     item { AchievementsRow(achievements = demoAchievements) }
-
-                    // ── PROJECTS HEADER ─────────────────────────────
                     item {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 16.dp),
+                            modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment     = Alignment.CenterVertically
                         ) {
                             Text("Your Work", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                             Text("${userProjects.size} projects", color = TextSecondary, fontSize = 13.sp)
                         }
                     }
-
-                    // ── PROJECT LIST ────────────────────────────────
                     if (userProjects.isEmpty()) {
-                        item {
-                            EmptyProjectsPlaceholder(
-                                onAdd = { navController.navigate(ROUT_SubmitWork) }
-                            )
-                        }
+                        item { EmptyProjectsPlaceholder(onAdd = { navController.navigate(ROUT_SubmitWork) }) }
                     } else {
                         items(userProjects, key = { it.title }) { project ->
                             ProjectCard(project = project)
@@ -489,34 +451,34 @@ fun ProfileScreen(navController: NavController) {
         }
     }
 
-    // ── UPDATE PROFILE BOTTOM SHEET ───────────────────────────────
+    // ── Bottom sheets ─────────────────────────────────────────────
     if (showUpdateSheet) {
         UpdateProfileSheet(
-            name           = editName,
-            profession     = editProfession,
-            category       = editCategory,
-            bio            = editBio,
-            avatarUri      = editAvatarUri,
-            currentAvatarUrl = profile.avatarUrl,
-            isSaving       = isSaving,
-            saveError      = saveError,
+            name               = editName,
+            profession         = editProfession,
+            category           = editCategory,
+            bio                = editBio,
+            avatarUri          = editAvatarUri,
+            currentAvatarUrl   = profile.avatarUrl,
+            isSaving           = isSaving,
+            saveError          = saveError,
             showValidationHint = showValidationHint,
-            isFormValid    = isFormValid,
-            onNameChange   = { editName = it; showValidationHint = false; saveError = "" },
-            onProfChange   = { editProfession = it; showValidationHint = false; saveError = "" },
-            onCatChange    = { editCategory = it },
-            onBioChange    = { editBio = it },
-            onPickPhoto    = { showPhotoPicker = true },
-            onSave         = { handleSave() },
-            onDismiss      = { showUpdateSheet = false }
+            isFormValid        = isFormValid,
+            onNameChange       = { editName = it; showValidationHint = false; saveError = "" },
+            onProfChange       = { editProfession = it; showValidationHint = false; saveError = "" },
+            onCatChange        = { editCategory = it },
+            onBioChange        = { editBio = it },
+            onPickPhoto        = { showPhotoPicker = true },
+            onSave             = { handleSave() },
+            onDismiss          = { showUpdateSheet = false }
         )
     }
 
-    // ── PHOTO PICKER SHEET ────────────────────────────────────────
     if (showPhotoPicker) {
         PhotoPickerSheet(
             onDismiss = { showPhotoPicker = false },
-            onCamera  = { showPhotoPicker = false; cameraLauncher.launch(cameraUri) },
+            // ── FIX: camera URI created here lazily, NOT at composition time ──
+            onCamera  = { showPhotoPicker = false; launchCamera() },
             onGallery = { showPhotoPicker = false; galleryLauncher.launch("image/*") },
             onRemove  = if (editAvatarUri != null) {
                 { editAvatarUri = null; showPhotoPicker = false }
@@ -562,48 +524,32 @@ fun BottomNavItem(
 }
 
 // ─────────────────────────────────────────────
-// HERO SECTION  — now driven by live UserProfile
+// HERO SECTION
 // ─────────────────────────────────────────────
 
 @Composable
 fun HeroSection(profile: UserProfile) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(GoldPrimary.copy(alpha = 0.15f), BackgroundMain)
-                    )
-                )
+                .background(Brush.verticalGradient(colors = listOf(GoldPrimary.copy(alpha = 0.15f), BackgroundMain)))
         )
-
-        // Decorative circle
         Box(
             modifier = Modifier
                 .size(180.dp)
                 .offset(x = 80.dp, y = (-40).dp)
                 .align(Alignment.TopEnd)
                 .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(GoldAccent.copy(alpha = 0.18f), Color.Transparent)
-                    ),
+                    brush = Brush.radialGradient(colors = listOf(GoldAccent.copy(alpha = 0.18f), Color.Transparent)),
                     shape = CircleShape
                 )
         )
-
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier              = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment   = Alignment.CenterHorizontally,
+            verticalArrangement   = Arrangement.Center
         ) {
-            // Avatar — shows Cloudinary image or fallback icon
             Box(
                 modifier = Modifier
                     .size(88.dp)
@@ -621,27 +567,15 @@ fun HeroSection(profile: UserProfile) {
                         modifier           = Modifier.fillMaxSize().clip(CircleShape)
                     )
                 } else {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = null,
-                        tint               = GoldPrimary,
-                        modifier           = Modifier.size(44.dp)
-                    )
+                    Icon(Icons.Default.Person, null, tint = GoldPrimary, modifier = Modifier.size(44.dp))
                 }
             }
-
             Spacer(Modifier.height(14.dp))
-
             Text(
                 profile.name.ifBlank { "Your Name" },
-                color      = TextPrimary,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize   = 22.sp
+                color = TextPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp
             )
-
             Spacer(Modifier.height(4.dp))
-
-            // Role pill — profession + category from database
             val roleText = buildString {
                 append(profile.profession.ifBlank { "Creative" })
                 if (profile.category.isNotBlank()) append(" · ${profile.category}")
@@ -654,16 +588,14 @@ fun HeroSection(profile: UserProfile) {
             ) {
                 Text(roleText, color = GoldDeep, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
-
             Spacer(Modifier.height(8.dp))
-
             Text(
                 profile.bio.ifBlank { "No bio yet — tap Edit Profile to add one." },
-                color    = TextSecondary,
-                fontSize = 13.sp,
+                color     = TextSecondary,
+                fontSize  = 13.sp,
                 lineHeight = 20.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                maxLines  = 2,
+                overflow  = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
             )
         }
@@ -677,53 +609,24 @@ fun HeroSection(profile: UserProfile) {
 @Composable
 fun StatsRow(projects: Int, likes: Int, reviews: Int) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
+        modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        StatCard(
-            value    = projects.toString(),
-            label    = "Projects",
-            icon     = Icons.Default.GridView,
-            accent   = GoldPrimary,
-            modifier = Modifier.weight(1f)
-        )
-        StatCard(
-            value    = "$likes",
-            label    = "Likes",
-            icon     = Icons.Default.Favorite,
-            accent   = SoftPeach,
-            modifier = Modifier.weight(1f)
-        )
-        StatCard(
-            value    = "$reviews",
-            label    = "Reviews",
-            icon     = Icons.Default.Star,
-            accent   = SoftGreen,
-            modifier = Modifier.weight(1f)
-        )
+        StatCard("$projects", "Projects", Icons.Default.GridView, GoldPrimary,  Modifier.weight(1f))
+        StatCard("$likes",    "Likes",    Icons.Default.Favorite, SoftPeach,    Modifier.weight(1f))
+        StatCard("$reviews",  "Reviews",  Icons.Default.Star,     SoftGreen,    Modifier.weight(1f))
     }
 }
 
 @Composable
-fun StatCard(
-    value: String,
-    label: String,
-    icon: ImageVector,
-    accent: Color,
-    modifier: Modifier = Modifier
-) {
+fun StatCard(value: String, label: String, icon: ImageVector, accent: Color, modifier: Modifier = Modifier) {
     Card(
         modifier  = modifier,
         shape     = RoundedCornerShape(16.dp),
         colors    = CardDefaults.cardColors(containerColor = CardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(1.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -746,26 +649,22 @@ fun StatCard(
 
 @Composable
 fun AchievementsRow(achievements: List<Achievement>) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
         Text("Achievements", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            achievements.forEach { achievement ->
+            achievements.forEach { a ->
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(achievement.color.copy(alpha = 0.1f))
-                        .border(1.dp, achievement.color.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                        .background(a.color.copy(alpha = 0.1f))
+                        .border(1.dp, a.color.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(achievement.icon, null, tint = achievement.color, modifier = Modifier.size(14.dp))
-                    Text(achievement.label, color = achievement.color, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Icon(a.icon, null, tint = a.color, modifier = Modifier.size(14.dp))
+                    Text(a.label, color = a.color, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -779,20 +678,13 @@ fun AchievementsRow(achievements: List<Achievement>) {
 @Composable
 fun ProjectCard(project: Project) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clickable { },
+        modifier  = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).clickable { },
         shape     = RoundedCornerShape(20.dp),
         colors    = CardDefaults.cardColors(containerColor = CardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(170.dp)
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().height(170.dp)) {
                 androidx.compose.foundation.Image(
                     painter            = androidx.compose.ui.res.painterResource(id = project.image),
                     contentDescription = null,
@@ -802,18 +694,12 @@ fun ProjectCard(project: Project) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f))
-                            )
-                        )
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f))))
                 )
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(12.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(GoldPrimary)
+                        .align(Alignment.TopStart).padding(12.dp)
+                        .clip(RoundedCornerShape(8.dp)).background(GoldPrimary)
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(project.category, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -821,10 +707,8 @@ fun ProjectCard(project: Project) {
                 if (project.isNew) {
                     Box(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(SoftGreen)
+                            .align(Alignment.TopEnd).padding(12.dp)
+                            .clip(RoundedCornerShape(8.dp)).background(SoftGreen)
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text("NEW", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -834,33 +718,17 @@ fun ProjectCard(project: Project) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(project.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    project.description,
-                    color    = TextSecondary,
-                    fontSize = 13.sp,
-                    lineHeight = 19.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(project.description, color = TextSecondary, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Default.Favorite, null, tint = SoftPeach, modifier = Modifier.size(16.dp))
                         Text("${project.likes} likes", color = TextSecondary, fontSize = 12.sp)
                     }
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(GoldPrimary.copy(alpha = 0.1f))
-                            .clickable { }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(8.dp)).background(GoldPrimary.copy(alpha = 0.1f))
+                            .clickable { }.padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text("View", color = GoldPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -877,16 +745,11 @@ fun ProjectCard(project: Project) {
 @Composable
 fun EmptyProjectsPlaceholder(onAdd: () -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(40.dp),
+        modifier            = Modifier.fillMaxWidth().padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(GoldPrimary.copy(alpha = 0.1f)),
+            modifier = Modifier.size(72.dp).clip(CircleShape).background(GoldPrimary.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Default.Add, null, tint = GoldPrimary, modifier = Modifier.size(36.dp))
@@ -894,18 +757,9 @@ fun EmptyProjectsPlaceholder(onAdd: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text("No projects yet", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
         Spacer(Modifier.height(6.dp))
-        Text(
-            "Start building your portfolio by adding your first project.",
-            color = TextSecondary,
-            fontSize = 13.sp,
-            lineHeight = 20.sp
-        )
+        Text("Start building your portfolio by adding your first project.", color = TextSecondary, fontSize = 13.sp, lineHeight = 20.sp)
         Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = onAdd,
-            shape  = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary)
-        ) {
+        Button(onClick = onAdd, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary)) {
             Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text("Add First Project", color = Color.White, fontWeight = FontWeight.Bold)
@@ -919,47 +773,28 @@ fun EmptyProjectsPlaceholder(onAdd: () -> Unit) {
 
 @Composable
 fun UpdateProfileSheet(
-    name: String,
-    profession: String,
-    category: String,
-    bio: String,
-    avatarUri: Uri?,
-    currentAvatarUrl: String,
-    isSaving: Boolean,
-    saveError: String,
-    showValidationHint: Boolean,
-    isFormValid: Boolean,
-    onNameChange:  (String) -> Unit,
-    onProfChange:  (String) -> Unit,
-    onCatChange:   (String) -> Unit,
-    onBioChange:   (String) -> Unit,
-    onPickPhoto:   () -> Unit,
-    onSave:        () -> Unit,
-    onDismiss:     () -> Unit
+    name: String, profession: String, category: String, bio: String,
+    avatarUri: Uri?, currentAvatarUrl: String,
+    isSaving: Boolean, saveError: String, showValidationHint: Boolean, isFormValid: Boolean,
+    onNameChange: (String) -> Unit, onProfChange: (String) -> Unit,
+    onCatChange:  (String) -> Unit, onBioChange:  (String) -> Unit,
+    onPickPhoto: () -> Unit, onSave: () -> Unit, onDismiss: () -> Unit
 ) {
     val shakeOffset by animateFloatAsState(
-        targetValue = if (showValidationHint) 1f else 0f,
+        targetValue   = if (showValidationHint) 1f else 0f,
         animationSpec = keyframes {
             durationMillis = 400
-            0f at 0; (-8f) at 50; 8f at 100
-            (-6f) at 150; 6f at 200; (-4f) at 250; 0f at 300
+            0f at 0; (-8f) at 50; 8f at 100; (-6f) at 150; 6f at 200; (-4f) at 250; 0f at 300
         },
         label = "shake"
     )
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.55f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss
-                ),
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             contentAlignment = Alignment.BottomCenter
         ) {
             Column(
@@ -968,71 +803,37 @@ fun UpdateProfileSheet(
                     .fillMaxHeight(0.92f)
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                     .background(CardBackground)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {}
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
             ) {
-                // Drag handle
                 Box(
                     modifier = Modifier
                         .padding(top = 12.dp, bottom = 4.dp)
                         .align(Alignment.CenterHorizontally)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFDDD8CE))
+                        .width(40.dp).height(4.dp)
+                        .clip(CircleShape).background(Color(0xFFDDD8CE))
                 )
-
-                // Sheet header
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    modifier              = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.ManageAccounts, null, tint = GoldPrimary, modifier = Modifier.size(20.dp))
-                        Text(
-                            "Update Profile",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
-                        )
+                        Text("Update Profile", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, null, tint = TextSecondary)
-                    }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, null, tint = TextSecondary) }
                 }
-
                 HorizontalDivider(color = Color(0xFFEDE7DD), thickness = 0.5.dp)
-
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
+                        .fillMaxWidth().weight(1f)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    // Avatar picker inside sheet
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        SheetAvatarPicker(
-                            avatarUri        = avatarUri,
-                            currentAvatarUrl = currentAvatarUrl,
-                            onPickPhoto      = onPickPhoto
-                        )
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        SheetAvatarPicker(avatarUri = avatarUri, currentAvatarUrl = currentAvatarUrl, onPickPhoto = onPickPhoto)
                     }
-
                     Spacer(Modifier.height(24.dp))
-
-                    // Form card
                     Card(
                         modifier  = Modifier.fillMaxWidth(),
                         shape     = RoundedCornerShape(20.dp),
@@ -1040,89 +841,35 @@ fun UpdateProfileSheet(
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
-                            SheetInputField(
-                                label         = "Full Name",
-                                value         = name,
-                                onValueChange = onNameChange,
-                                icon          = Icons.Outlined.Person,
-                                hint          = "e.g. Kennedy Osei",
-                                isRequired    = true,
-                                showError     = showValidationHint && name.isBlank(),
-                                imeAction     = ImeAction.Next
-                            )
+                            SheetInputField("Full Name",        name,       onNameChange, Icons.Outlined.Person,   "e.g. Kennedy Osei",                   isRequired = true,  showError = showValidationHint && name.isBlank(),       imeAction = ImeAction.Next)
                             SheetFieldDivider()
-                            SheetInputField(
-                                label         = "Profession",
-                                value         = profession,
-                                onValueChange = onProfChange,
-                                icon          = Icons.Outlined.Work,
-                                hint          = "e.g. Designer, Filmmaker, Writer",
-                                isRequired    = true,
-                                showError     = showValidationHint && profession.isBlank(),
-                                imeAction     = ImeAction.Next
-                            )
+                            SheetInputField("Profession",       profession, onProfChange, Icons.Outlined.Work,     "e.g. Designer, Filmmaker, Writer",    isRequired = true,  showError = showValidationHint && profession.isBlank(), imeAction = ImeAction.Next)
                             SheetFieldDivider()
-                            SheetInputField(
-                                label         = "Creative Category",
-                                value         = category,
-                                onValueChange = onCatChange,
-                                icon          = Icons.Outlined.Category,
-                                hint          = "e.g. UI/UX, Music Production, Fiction",
-                                imeAction     = ImeAction.Next
-                            )
+                            SheetInputField("Creative Category",category,  onCatChange,  Icons.Outlined.Category, "e.g. UI/UX, Music Production, Fiction",                                                                             imeAction = ImeAction.Next)
                             SheetFieldDivider()
-                            SheetInputField(
-                                label         = "Short Bio",
-                                value         = bio,
-                                onValueChange = onBioChange,
-                                icon          = Icons.Outlined.Edit,
-                                hint          = "What drives your creative work?",
-                                singleLine    = false,
-                                imeAction     = ImeAction.Done,
-                                minLines      = 3
-                            )
+                            SheetInputField("Short Bio",        bio,        onBioChange,  Icons.Outlined.Edit,     "What drives your creative work?",     singleLine = false, imeAction = ImeAction.Done, minLines = 3)
                         }
                     }
-
                     Spacer(Modifier.height(16.dp))
-
-                    // Validation hint
-                    AnimatedVisibility(
-                        visible = showValidationHint,
-                        enter   = fadeIn() + slideInVertically { -8 },
-                        exit    = fadeOut()
-                    ) {
+                    AnimatedVisibility(visible = showValidationHint, enter = fadeIn() + slideInVertically { -8 }, exit = fadeOut()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .offset(x = shakeOffset.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Error.copy(alpha = 0.08f))
+                                .fillMaxWidth().offset(x = shakeOffset.dp)
+                                .clip(RoundedCornerShape(10.dp)).background(Error.copy(alpha = 0.08f))
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Icon(Icons.Default.Info, null, tint = Error, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Name and Profession are required",
-                                style = MaterialTheme.typography.bodySmall.copy(color = Error, fontWeight = FontWeight.W500)
-                            )
+                            Text("Name and Profession are required", style = MaterialTheme.typography.bodySmall.copy(color = Error, fontWeight = FontWeight.W500))
                         }
                     }
-
-                    // Save error
-                    AnimatedVisibility(
-                        visible = saveError.isNotEmpty(),
-                        enter   = fadeIn() + slideInVertically { -8 },
-                        exit    = fadeOut()
-                    ) {
+                    AnimatedVisibility(visible = saveError.isNotEmpty(), enter = fadeIn() + slideInVertically { -8 }, exit = fadeOut()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Error.copy(alpha = 0.08f))
+                                .fillMaxWidth().padding(top = 8.dp)
+                                .clip(RoundedCornerShape(10.dp)).background(Error.copy(alpha = 0.08f))
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Icon(Icons.Default.ErrorOutline, null, tint = Error, modifier = Modifier.size(14.dp))
@@ -1131,14 +878,7 @@ fun UpdateProfileSheet(
                         }
                     }
                 }
-
-                // Bottom save bar
-                SheetSaveBar(
-                    isFormValid = isFormValid,
-                    isSaving    = isSaving,
-                    hasAvatar   = avatarUri != null,
-                    onSave      = onSave
-                )
+                SheetSaveBar(isFormValid = isFormValid, isSaving = isSaving, hasAvatar = avatarUri != null, onSave = onSave)
             }
         }
     }
@@ -1149,77 +889,39 @@ fun UpdateProfileSheet(
 // ─────────────────────────────────────────────
 
 @Composable
-fun SheetAvatarPicker(
-    avatarUri: Uri?,
-    currentAvatarUrl: String,
-    onPickPhoto: () -> Unit
-) {
+fun SheetAvatarPicker(avatarUri: Uri?, currentAvatarUrl: String, onPickPhoto: () -> Unit) {
     val scaleAnim by animateFloatAsState(
         targetValue   = if (avatarUri != null) 1.05f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label         = "avatar_scale"
     )
-
     Box(contentAlignment = Alignment.Center, modifier = Modifier.scale(scaleAnim)) {
         Box(
-            modifier = Modifier
-                .size(104.dp)
-                .clip(CircleShape)
-                .background(
-                    if (avatarUri != null || currentAvatarUrl.isNotBlank()) GoldGradient
-                    else Brush.linearGradient(listOf(Color(0xFFDDD8CE), Color(0xFFCCC5B8)))
-                )
+            modifier = Modifier.size(104.dp).clip(CircleShape)
+                .background(if (avatarUri != null || currentAvatarUrl.isNotBlank()) GoldGradient else Brush.linearGradient(listOf(Color(0xFFDDD8CE), Color(0xFFCCC5B8))))
         )
         Box(modifier = Modifier.size(97.dp).clip(CircleShape).background(CardBackground))
         Box(
-            modifier = Modifier
-                .size(88.dp)
-                .clip(CircleShape)
-                .background(BackgroundSecondary)
-                .clickable(onClick = onPickPhoto),
+            modifier = Modifier.size(88.dp).clip(CircleShape).background(BackgroundSecondary).clickable(onClick = onPickPhoto),
             contentAlignment = Alignment.Center
         ) {
             when {
-                avatarUri != null -> {
-                    AsyncImage(
-                        model              = avatarUri,
-                        contentDescription = "New profile photo",
-                        contentScale       = ContentScale.Crop,
-                        modifier           = Modifier.fillMaxSize().clip(CircleShape)
-                    )
-                }
-                currentAvatarUrl.isNotBlank() -> {
-                    AsyncImage(
-                        model              = currentAvatarUrl,
-                        contentDescription = "Current profile photo",
-                        contentScale       = ContentScale.Crop,
-                        modifier           = Modifier.fillMaxSize().clip(CircleShape)
-                    )
-                }
+                avatarUri != null          -> AsyncImage(model = avatarUri,        contentDescription = "New photo",     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
+                currentAvatarUrl.isNotBlank() -> AsyncImage(model = currentAvatarUrl, contentDescription = "Current photo", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
                 else -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.CameraAlt, null, tint = GoldPrimary, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Add photo",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = TextSecondary, fontSize = 10.sp, letterSpacing = 0.3.sp
-                            )
-                        )
+                        Text("Add photo", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary, fontSize = 10.sp, letterSpacing = 0.3.sp))
                     }
                 }
             }
         }
-        // Edit badge
         Box(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = (-2).dp, y = (-2).dp)
-                .size(26.dp)
-                .clip(CircleShape)
-                .background(GoldGradient)
-                .border(2.dp, CardBackground, CircleShape)
-                .clickable(onClick = onPickPhoto),
+                .align(Alignment.BottomEnd).offset(x = (-2).dp, y = (-2).dp)
+                .size(26.dp).clip(CircleShape).background(GoldGradient)
+                .border(2.dp, CardBackground, CircleShape).clickable(onClick = onPickPhoto),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -1231,16 +933,13 @@ fun SheetAvatarPicker(
 }
 
 // ─────────────────────────────────────────────
-// SHEET INPUT FIELD  (same styling as ProfileSetupScreen)
+// SHEET INPUT FIELD
 // ─────────────────────────────────────────────
 
 @Composable
 fun SheetInputField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    icon: ImageVector,
-    hint: String,
+    label: String, value: String, onValueChange: (String) -> Unit,
+    icon: ImageVector, hint: String,
     singleLine: Boolean  = true,
     imeAction: ImeAction = ImeAction.Next,
     minLines: Int        = 1,
@@ -1255,84 +954,44 @@ fun SheetInputField(
     Column {
         Row(verticalAlignment = Alignment.Top) {
             Box(
-                modifier = Modifier
-                    .padding(top = 4.dp)
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(iconBg),
+                modifier = Modifier.padding(top = 4.dp).size(36.dp).clip(RoundedCornerShape(10.dp)).background(iconBg),
                 contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
-            }
+            ) { Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp)) }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = labelColor, fontWeight = FontWeight.W600,
-                            letterSpacing = 0.4.sp, fontSize = 11.sp
-                        )
-                    )
-                    if (isRequired) Text(
-                        " *",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color    = if (showError) Error else GoldPrimary,
-                            fontSize = 11.sp
-                        )
-                    )
+                    Text(label, style = MaterialTheme.typography.labelSmall.copy(color = labelColor, fontWeight = FontWeight.W600, letterSpacing = 0.4.sp, fontSize = 11.sp))
+                    if (isRequired) Text(" *", style = MaterialTheme.typography.labelSmall.copy(color = if (showError) Error else GoldPrimary, fontSize = 11.sp))
                 }
                 TextField(
                     value           = value,
                     onValueChange   = onValueChange,
-                    placeholder     = {
-                        Text(hint, style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFFBBBBBB), fontSize = 14.sp))
-                    },
+                    placeholder     = { Text(hint, style = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFFBBBBBB), fontSize = 14.sp)) },
                     singleLine      = singleLine,
                     minLines        = minLines,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction      = imeAction
-                    ),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = imeAction),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor   = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor   = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedTextColor        = TextPrimary,
-                        unfocusedTextColor      = TextPrimary,
+                        focusedContainerColor   = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor   = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                        focusedTextColor        = TextPrimary,       unfocusedTextColor      = TextPrimary,
                         cursorColor             = GoldPrimary
                     ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.W400
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.W400),
+                    modifier  = Modifier.fillMaxWidth().padding(top = 2.dp)
                 )
             }
         }
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                 .height(if (showError) 1.5.dp else 1.dp)
-                .background(
-                    when {
-                        showError -> Brush.linearGradient(listOf(Error, Error.copy(alpha = 0.6f)))
-                        isFilled  -> GoldGradient
-                        else      -> Brush.linearGradient(listOf(Color(0xFFEDE7DD), Color(0xFFEDE7DD)))
-                    }
-                )
+                .background(when { showError -> Brush.linearGradient(listOf(Error, Error.copy(alpha = 0.6f))); isFilled -> GoldGradient; else -> Brush.linearGradient(listOf(Color(0xFFEDE7DD), Color(0xFFEDE7DD))) })
         )
     }
 }
 
 @Composable
 fun SheetFieldDivider() {
-    HorizontalDivider(
-        color    = Color(0xFFEDE7DD),
-        thickness = 0.5.dp,
-        modifier = Modifier.padding(vertical = 10.dp)
-    )
+    HorizontalDivider(color = Color(0xFFEDE7DD), thickness = 0.5.dp, modifier = Modifier.padding(vertical = 10.dp))
 }
 
 // ─────────────────────────────────────────────
@@ -1340,125 +999,49 @@ fun SheetFieldDivider() {
 // ─────────────────────────────────────────────
 
 @Composable
-fun SheetSaveBar(
-    isFormValid: Boolean,
-    isSaving: Boolean,
-    hasAvatar: Boolean,
-    onSave: () -> Unit
-) {
+fun SheetSaveBar(isFormValid: Boolean, isSaving: Boolean, hasAvatar: Boolean, onSave: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    val isPressed  by interactionSource.collectIsPressedAsState()
     val buttonScale by animateFloatAsState(
         targetValue   = if (isPressed) 0.97f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
         label         = "btn_scale"
     )
-
-    Surface(
-        tonalElevation = 4.dp,
-        color          = CardBackground,
-        shadowElevation = 8.dp
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
+    Surface(tonalElevation = 4.dp, color = CardBackground, shadowElevation = 8.dp) {
+        Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Status hint
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    AnimatedContent(
-                        targetState = Triple(isFormValid, isSaving, hasAvatar),
-                        label       = "save_hint"
-                    ) { (valid, saving, avatar) ->
-                        Row(
-                            verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    AnimatedContent(targetState = Triple(isFormValid, isSaving, hasAvatar), label = "save_hint") { (valid, saving, avatar) ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             when {
-                                saving && avatar -> {
-                                    CircularProgressIndicator(color = GoldPrimary, strokeWidth = 1.5.dp, modifier = Modifier.size(10.dp))
-                                    Text("Uploading photo…", style = MaterialTheme.typography.labelSmall.copy(color = GoldPrimary, fontSize = 12.sp))
-                                }
-                                saving -> {
-                                    CircularProgressIndicator(color = GoldPrimary, strokeWidth = 1.5.dp, modifier = Modifier.size(10.dp))
-                                    Text("Saving profile…", style = MaterialTheme.typography.labelSmall.copy(color = GoldPrimary, fontSize = 12.sp))
-                                }
-                                valid -> {
-                                    Box(Modifier.size(6.dp).clip(CircleShape).background(Success))
-                                    Text("Ready to save", style = MaterialTheme.typography.labelSmall.copy(color = Success, fontWeight = FontWeight.W500, fontSize = 12.sp))
-                                }
-                                else -> {
-                                    Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFD8D0C4)))
-                                    Text("Fill in Name and Profession", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary, fontSize = 12.sp))
-                                }
+                                saving && avatar -> { CircularProgressIndicator(color = GoldPrimary, strokeWidth = 1.5.dp, modifier = Modifier.size(10.dp)); Text("Uploading photo…",  style = MaterialTheme.typography.labelSmall.copy(color = GoldPrimary, fontSize = 12.sp)) }
+                                saving           -> { CircularProgressIndicator(color = GoldPrimary, strokeWidth = 1.5.dp, modifier = Modifier.size(10.dp)); Text("Saving profile…",   style = MaterialTheme.typography.labelSmall.copy(color = GoldPrimary, fontSize = 12.sp)) }
+                                valid            -> { Box(Modifier.size(6.dp).clip(CircleShape).background(Success));              Text("Ready to save",        style = MaterialTheme.typography.labelSmall.copy(color = Success,     fontWeight = FontWeight.W500, fontSize = 12.sp)) }
+                                else             -> { Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFD8D0C4)));    Text("Fill in Name and Profession", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary, fontSize = 12.sp)) }
                             }
                         }
                     }
                 }
-
-                // Save button
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp)
-                        .scale(buttonScale)
+                        .fillMaxWidth().height(58.dp).scale(buttonScale)
                         .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            if (isFormValid && !isSaving) GoldGradient
-                            else Brush.linearGradient(listOf(Color(0xFFD8D0C4), Color(0xFFCCC5B8)))
-                        )
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication        = ripple(color = if (isFormValid) DarkSurface.copy(alpha = 0.15f) else Color.Transparent),
-                            enabled           = !isSaving,
-                            onClick           = onSave
-                        ),
+                        .background(if (isFormValid && !isSaving) GoldGradient else Brush.linearGradient(listOf(Color(0xFFD8D0C4), Color(0xFFCCC5B8))))
+                        .clickable(interactionSource = interactionSource, indication = ripple(color = if (isFormValid) DarkSurface.copy(alpha = 0.15f) else Color.Transparent), enabled = !isSaving, onClick = onSave),
                     contentAlignment = Alignment.Center
                 ) {
-                    AnimatedContent(
-                        targetState    = isSaving,
-                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
-                        label          = "btn_content"
-                    ) { saving ->
+                    AnimatedContent(targetState = isSaving, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) }, label = "btn_content") { saving ->
                         if (saving) {
-                            Row(
-                                verticalAlignment     = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 CircularProgressIndicator(color = DarkSurface, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                                Text(
-                                    if (hasAvatar) "Uploading & saving…" else "Saving profile…",
-                                    style = MaterialTheme.typography.titleSmall.copy(color = DarkSurface, fontWeight = FontWeight.W600)
-                                )
+                                Text(if (hasAvatar) "Uploading & saving…" else "Saving profile…", style = MaterialTheme.typography.titleSmall.copy(color = DarkSurface, fontWeight = FontWeight.W600))
                             }
                         } else {
-                            Row(
-                                verticalAlignment     = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    "Save Changes",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        color      = if (isFormValid) DarkSurface else Color(0xFF9A9A9A),
-                                        fontWeight = FontWeight.W700,
-                                        fontSize   = 15.sp
-                                    )
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                                Text("Save Changes", style = MaterialTheme.typography.titleMedium.copy(color = if (isFormValid) DarkSurface else Color(0xFF9A9A9A), fontWeight = FontWeight.W700, fontSize = 15.sp))
                                 if (isFormValid) {
                                     Spacer(Modifier.width(10.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .background(DarkSurface.copy(alpha = 0.12f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                    Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(DarkSurface.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                                         Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DarkSurface, modifier = Modifier.size(15.dp))
                                     }
                                 }
@@ -1476,69 +1059,30 @@ fun SheetSaveBar(
 // ─────────────────────────────────────────────
 
 @Composable
-fun PhotoPickerSheet(
-    onDismiss: () -> Unit,
-    onCamera:  () -> Unit,
-    onGallery: () -> Unit,
-    onRemove:  (() -> Unit)?
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties       = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
+fun PhotoPickerSheet(onDismiss: () -> Unit, onCamera: () -> Unit, onGallery: () -> Unit, onRemove: (() -> Unit)?) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.55f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication        = null,
-                    onClick           = onDismiss
-                ),
+                .fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             contentAlignment = Alignment.BottomCenter
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .background(CardBackground)
-                    .padding(bottom = 32.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication        = null
-                    ) {}
+                    .background(CardBackground).padding(bottom = 32.dp)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
             ) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 12.dp, bottom = 20.dp)
-                        .align(Alignment.CenterHorizontally)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFDDD8CE))
-                )
-                Text(
-                    "Profile Photo",
-                    style    = MaterialTheme.typography.titleMedium.copy(
-                        color = TextPrimary, fontWeight = FontWeight.W700, fontSize = 17.sp
-                    ),
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                )
-                Text(
-                    "Choose how to set your avatar",
-                    style    = MaterialTheme.typography.bodySmall.copy(color = TextSecondary, fontSize = 13.sp),
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp)
-                )
+                Box(modifier = Modifier.padding(top = 12.dp, bottom = 20.dp).align(Alignment.CenterHorizontally).width(40.dp).height(4.dp).clip(CircleShape).background(Color(0xFFDDD8CE)))
+                Text("Profile Photo",             style = MaterialTheme.typography.titleMedium.copy(color = TextPrimary,   fontWeight = FontWeight.W700, fontSize = 17.sp), modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
+                Text("Choose how to set your avatar", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary, fontSize = 13.sp),                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp))
                 HorizontalDivider(color = Color(0xFFEDE7DD), thickness = 0.5.dp)
                 Spacer(Modifier.height(8.dp))
                 PickerOption(Icons.Default.CameraAlt,    "Take a photo",        "Open your camera",   GoldPrimary.copy(alpha = 0.10f), GoldPrimary, onCamera)
                 PickerOption(Icons.Default.PhotoLibrary, "Choose from gallery", "Browse your photos", SoftBlue.copy(alpha = 0.12f),   SoftBlue,    onGallery)
                 if (onRemove != null) {
-                    HorizontalDivider(
-                        color    = Color(0xFFEDE7DD),
-                        thickness = 0.5.dp,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                    )
+                    HorizontalDivider(color = Color(0xFFEDE7DD), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
                     PickerOption(Icons.Default.DeleteOutline, "Remove photo", "Revert to initials", Error.copy(alpha = 0.08f), Error, onRemove)
                 }
             }
@@ -1547,24 +1091,12 @@ fun PhotoPickerSheet(
 }
 
 @Composable
-private fun PickerOption(
-    icon: ImageVector, label: String, subtitle: String,
-    iconBg: Color, iconTint: Color, onClick: () -> Unit
-) {
+private fun PickerOption(icon: ImageVector, label: String, subtitle: String, iconBg: Color, iconTint: Color, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(iconBg),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(iconBg), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(16.dp))

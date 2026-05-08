@@ -345,7 +345,12 @@ fun ProfileScreen(navController: NavController) {
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigate(ROUT_Dashboard) }) {
+                    IconButton(onClick = {
+                        navController.navigate(ROUT_Dashboard) {
+                            popUpTo(ROUT_Dashboard) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",

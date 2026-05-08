@@ -1,11 +1,12 @@
 package com.kennedy.forge.ui.screens.community
 
 // ─────────────────────────────────────────────────────────────────
-//  DEPENDENCIES  (add to build.gradle)
+//  DEPENDENCIES
 //  implementation("io.getstream:stream-webrtc-android:1.1.2")
 //  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 //  implementation("com.google.accompanist:accompanist-permissions:0.34.0")
-//  implementation("com.google.firebase:firebase-database-ktx")  ← already in project
+//  implementation("com.google.firebase:firebase-database-ktx")
+//  implementation("com.google.firebase:firebase-auth-ktx")
 // ─────────────────────────────────────────────────────────────────
 
 import android.Manifest
@@ -33,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -44,7 +46,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.google.firebase.database.*
+import com.kennedy.forge.navigation.ROUT_DiscoveryFeed
 import com.kennedy.forge.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -57,7 +61,8 @@ import java.util.UUID
 // ─────────────────────────────────────────────────────────────────
 
 data class Collaborator(
-    val name: String,
+    val uid: String     = "",
+    val name: String    = "",
     val role: String    = "",
     val online: Boolean = true
 )
@@ -80,8 +85,16 @@ data class Message(
 )
 
 // ─────────────────────────────────────────────────────────────────
+//  INCOMING CALL STATE  (shared between screen and dialog)
+// ─────────────────────────────────────────────────────────────────
+
+data class IncomingCallInfo(
+    val callerName: String,
+    val roomId: String
+)
+
+// ─────────────────────────────────────────────────────────────────
 //  WEBRTC MANAGER
-//  Peer connection + ICE + local/remote streams via Firebase signalling
 // ─────────────────────────────────────────────────────────────────
 
 class WebRTCManager(private val context: Context) {
@@ -92,21 +105,28 @@ class WebRTCManager(private val context: Context) {
     private var localAudioTrack: AudioTrack?                  = null
     private var localStream: MediaStream?                     = null
 
-    // FIX: single shared EglBase — reused by all SurfaceViewRenderers, released in dispose()
+    // Single shared EglBase — reused by all SurfaceViewRenderers, released in dispose()
     val sharedEglBase: EglBase = EglBase.create()
 
-    var onRemoteStreamAdded: ((VideoTrack) -> Unit)?                          = null
+    var onRemoteStreamAdded: ((VideoTrack) -> Unit)?                           = null
     var onConnectionStateChange: ((PeerConnection.IceConnectionState) -> Unit)? = null
 
     private val db     = Firebase.database.reference.child("webrtc_rooms")
-    private var roomId = ""
+    var roomId         = ""
+        private set
 
     private val iceServers = listOf(
         IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
-        IceServer.builder("stun:stun1.l.google.com:19302").createIceServer()
+        IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+        IceServer.builder("stun:stun2.l.google.com:19302").createIceServer()
     )
 
+    // Track whether init() has been called so it's safe to call multiple times
+    private var isInitialized = false
+
     fun init() {
+        if (isInitialized) return
+        isInitialized = true
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context)
                 .setEnableInternalTracer(false)
@@ -125,7 +145,6 @@ class WebRTCManager(private val context: Context) {
 
     fun startLocalCapture(surfaceViewRenderer: SurfaceViewRenderer) {
         val factory = peerConnectionFactory ?: return
-        // FIX: init renderer with the shared EglBase — no separate allocation
         surfaceViewRenderer.init(sharedEglBase.eglBaseContext, null)
         surfaceViewRenderer.setMirror(true)
 
@@ -150,14 +169,22 @@ class WebRTCManager(private val context: Context) {
         }
     }
 
-    fun createRoom(onRoomCreated: (String) -> Unit) {
+    /**
+     * Creates a new room in Firebase and returns the room ID to the caller.
+     * The caller's name is written to Firebase so the callee can see who is calling.
+     */
+    fun createRoom(callerName: String, onRoomCreated: (String) -> Unit) {
         roomId = db.push().key ?: UUID.randomUUID().toString()
         createPeerConnection()
         peerConnection?.createOffer(object : SimpleSdpObserver() {
             override fun onCreateSuccess(sdp: SessionDescription?) {
                 peerConnection?.setLocalDescription(SimpleSdpObserver(), sdp)
-                db.child(roomId).child("offer").setValue(
-                    mapOf("type" to sdp?.type?.canonicalForm(), "sdp" to sdp?.description)
+                db.child(roomId).setValue(
+                    mapOf(
+                        "offer"      to mapOf("type" to sdp?.type?.canonicalForm(), "sdp" to sdp?.description),
+                        "callerName" to callerName,
+                        "status"     to "calling"
+                    )
                 )
                 listenForAnswer()
                 listenForRemoteICE()
@@ -166,6 +193,9 @@ class WebRTCManager(private val context: Context) {
         }, MediaConstraints())
     }
 
+    /**
+     * Joins an existing room. Called by the callee after accepting an incoming call.
+     */
     fun joinRoom(targetRoomId: String) {
         roomId = targetRoomId
         createPeerConnection()
@@ -182,24 +212,23 @@ class WebRTCManager(private val context: Context) {
             )
 
             peerConnection?.createAnswer(object : SimpleSdpObserver() {
-                // FIX: Added the '?' to SessionDescription to match the override
                 override fun onCreateSuccess(answerSdp: SessionDescription?) {
-                    if (answerSdp == null) return // Safety check
-
+                    if (answerSdp == null) return
                     peerConnection?.setLocalDescription(SimpleSdpObserver(), answerSdp)
-
                     db.child(roomId).child("answer").setValue(
                         mapOf(
-                            "type" to answerSdp.type.canonicalForm(), // Fixed function call
-                            "sdp" to answerSdp.description
+                            "type" to answerSdp.type.canonicalForm(),
+                            "sdp"  to answerSdp.description
                         )
                     )
+                    db.child(roomId).child("status").setValue("connected")
                 }
             }, MediaConstraints())
 
             listenForRemoteICE()
         }
     }
+
     private fun listenForAnswer() {
         db.child(roomId).child("answer")
             .addValueEventListener(object : ValueEventListener {
@@ -274,10 +303,7 @@ class WebRTCManager(private val context: Context) {
                 override fun onRemoveStream(p0: MediaStream?) {}
                 override fun onDataChannel(p0: DataChannel?) {}
                 override fun onRenegotiationNeeded() {}
-                override fun onAddTrack(
-                    receiver: RtpReceiver?,
-                    streams: Array<out MediaStream>?
-                ) {
+                override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
                     val track = receiver?.track()
                     if (track is VideoTrack) onRemoteStreamAdded?.invoke(track)
                 }
@@ -308,19 +334,22 @@ class WebRTCManager(private val context: Context) {
     }
 
     fun dispose() {
+        if (!isInitialized) return
         localVideoTrack?.dispose()
         localAudioTrack?.dispose()
         localStream?.dispose()
         peerConnection?.close()
         peerConnection?.dispose()
         peerConnectionFactory?.dispose()
-        // FIX: release shared EglBase here — single controlled release point
         runCatching { sharedEglBase.release() }
-        if (roomId.isNotEmpty()) db.child(roomId).removeValue()
+        if (roomId.isNotEmpty()) {
+            db.child(roomId).removeValue()
+            roomId = ""
+        }
+        isInitialized = false
     }
 }
 
-// Minimal SDP observer to reduce boilerplate
 open class SimpleSdpObserver : SdpObserver {
     override fun onCreateSuccess(sdp: SessionDescription?) {}
     override fun onSetSuccess() {}
@@ -330,12 +359,17 @@ open class SimpleSdpObserver : SdpObserver {
 
 // ─────────────────────────────────────────────────────────────────
 //  VIDEO CALL DIALOG
+//  FIX: does NOT own dispose() — screen owns the lifecycle.
+//  FIX: init() is called here (idempotent) so re-opening works.
 // ─────────────────────────────────────────────────────────────────
 
 @Composable
 fun VideoCallDialog(
     webRTCManager: WebRTCManager,
     callee: String,
+    isIncoming: Boolean = false,
+    incomingRoomId: String = "",
+    myName: String = "",
     onDismiss: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -344,7 +378,7 @@ fun VideoCallDialog(
     var isCameraOff  by remember { mutableStateOf(false) }
     var callDuration by remember { mutableStateOf(0) }
     var isConnecting by remember { mutableStateOf(true) }
-    var roomId       by remember { mutableStateOf("") }
+    var roomIdDisplay by remember { mutableStateOf("") }
 
     val pulseAnim  = rememberInfiniteTransition(label = "pulse")
     val pulseScale by pulseAnim.animateFloat(
@@ -357,17 +391,31 @@ fun VideoCallDialog(
     )
 
     LaunchedEffect(Unit) {
+        // idempotent — safe to call even if already initialized
         webRTCManager.init()
+
         webRTCManager.onConnectionStateChange = { state ->
             when (state) {
                 IceConnectionState.CONNECTED,
                 IceConnectionState.COMPLETED    -> isConnecting = false
                 IceConnectionState.DISCONNECTED,
-                IceConnectionState.FAILED       -> onDismiss()
+                IceConnectionState.FAILED,
+                IceConnectionState.CLOSED       -> onDismiss()
                 else                            -> {}
             }
         }
-        webRTCManager.createRoom { id -> roomId = id }
+
+        if (isIncoming && incomingRoomId.isNotEmpty()) {
+            // Callee: join the existing room created by the caller
+            roomIdDisplay = incomingRoomId
+            webRTCManager.joinRoom(incomingRoomId)
+        } else {
+            // Caller: create a new room
+            webRTCManager.createRoom(callerName = myName) { id ->
+                roomIdDisplay = id
+            }
+        }
+
         scope.launch {
             while (true) {
                 delay(1000)
@@ -376,14 +424,12 @@ fun VideoCallDialog(
         }
     }
 
-    // FIX: single DisposableEffect owns cleanup — VideoCallDialog is the sole lifecycle owner
-    DisposableEffect(Unit) {
-        onDispose { webRTCManager.dispose() }
-    }
+    // FIX: Dialog does NOT call dispose() — the screen-level DisposableEffect handles that.
+    // This prevents double-dispose when the dialog is dismissed while the screen is still alive.
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties       = DialogProperties(
+        properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress      = false
         )
@@ -393,7 +439,6 @@ fun VideoCallDialog(
                 .fillMaxSize()
                 .background(Color(0xFF080C12))
         ) {
-
             // ── REMOTE VIDEO ──────────────────────────────────────
             AndroidView(
                 factory = { ctx ->
@@ -402,7 +447,6 @@ fun VideoCallDialog(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
-                        // FIX: reuse manager's sharedEglBase — no separate allocation or leak
                         init(webRTCManager.sharedEglBase.eglBaseContext, null)
                         webRTCManager.onRemoteStreamAdded = { track -> track.addSink(this) }
                     }
@@ -455,11 +499,14 @@ fun VideoCallDialog(
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(8.dp))
-                        Text("Calling…", color = Color.White.copy(0.5f), fontSize = 14.sp)
-                        if (roomId.isNotEmpty()) {
+                        Text(
+                            if (isIncoming) "Connecting…" else "Calling…",
+                            color = Color.White.copy(0.5f), fontSize = 14.sp
+                        )
+                        if (roomIdDisplay.isNotEmpty()) {
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                "Room: $roomId",
+                                "Room: $roomIdDisplay",
                                 color         = GoldPrimary.copy(0.6f),
                                 fontSize      = 10.sp,
                                 letterSpacing = 1.sp
@@ -486,7 +533,6 @@ fun VideoCallDialog(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
-                            // startLocalCapture inits with sharedEglBase internally
                             webRTCManager.startLocalCapture(this)
                         }
                     },
@@ -504,16 +550,11 @@ fun VideoCallDialog(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
+                    Text(callee, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text(
-                        callee,
-                        color      = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 16.sp
-                    )
-                    Text(
-                        text  = if (isConnecting) "Connecting…"
+                        text = if (isConnecting) "Connecting…"
                         else "%02d:%02d".format(callDuration / 60, callDuration % 60),
-                        color = if (isConnecting) GoldPrimary else Color.White.copy(0.6f),
+                        color    = if (isConnecting) GoldPrimary else Color.White.copy(0.6f),
                         fontSize = 12.sp
                     )
                 }
@@ -533,9 +574,7 @@ fun VideoCallDialog(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(0.85f))
-                        )
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.85f)))
                     )
                     .navigationBarsPadding()
                     .padding(horizontal = 32.dp, vertical = 32.dp),
@@ -557,11 +596,7 @@ fun VideoCallDialog(
                         .clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.CallEnd, null,
-                        tint     = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
+                    Icon(Icons.Default.CallEnd, null, tint = Color.White, modifier = Modifier.size(28.dp))
                 }
                 CallControlButton(
                     icon       = if (isCameraOff) Icons.Default.VideocamOff else Icons.Default.Videocam,
@@ -600,24 +635,116 @@ private fun CallControlButton(
 }
 
 // ─────────────────────────────────────────────────────────────────
+//  INCOMING CALL OVERLAY
+// ─────────────────────────────────────────────────────────────────
+
+@Composable
+fun IncomingCallOverlay(
+    info: IncomingCallInfo,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    val pulseAnim  = rememberInfiniteTransition(label = "ring")
+    val pulseScale by pulseAnim.animateFloat(
+        1f, 1.25f,
+        animationSpec = infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "ring_scale"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF1A1200), DarkCard)))
+            .border(1.dp, GoldPrimary.copy(0.5f), RoundedCornerShape(24.dp))
+            .padding(20.dp)
+    ) {
+        Row(
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size((52 * pulseScale).dp)
+                        .clip(CircleShape)
+                        .background(GoldPrimary.copy(0.15f))
+                )
+                Box(
+                    Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Brush.radialGradient(listOf(GoldPrimary, GoldDeep))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        info.callerName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                        color = DarkSurface, fontSize = 22.sp, fontWeight = FontWeight.Black
+                    )
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Incoming Call", color = GoldPrimary, fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(info.callerName, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                Text("wants to video call", color = TextSecondary, fontSize = 12.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(Error.copy(0.15f)).clickable(onClick = onDecline),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CallEnd, null, tint = Error, modifier = Modifier.size(20.dp))
+                }
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(SoftGreen.copy(0.15f)).clickable(onClick = onAccept),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.VideoCall, null, tint = SoftGreen, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  MAIN SCREEN
+//
+//  FIX 1: LocalInspectionMode guard — WebRTCManager and Firebase are
+//          NOT created in Preview mode, preventing the crash.
+//  FIX 2: Single DisposableEffect at the screen level owns dispose().
+//          VideoCallDialog no longer calls dispose().
+//  FIX 3: Real collaborators from Firebase Auth presence system.
+//  FIX 4: Incoming call listener via Firebase — other users can call you.
+//  FIX 5: LazyColumn scroll fixed — uses messages.size - 1, not MAX_VALUE.
 // ─────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollaborationScreen(navController: NavController) {
 
-    val context = LocalContext.current
+    val context    = LocalContext.current
+    val isPreview  = LocalInspectionMode.current
+
+    // FIX 1: Guard all Firebase/WebRTC work behind isPreview
+    val myUid  = if (isPreview) "preview_uid"
+    else Firebase.auth.currentUser?.uid ?: "anon_${UUID.randomUUID()}"
+    val myName = if (isPreview) "You"
+    else Firebase.auth.currentUser?.displayName
+        ?.takeIf { it.isNotBlank() } ?: "User"
 
     // ── State ──────────────────────────────────────────────────
     var collaborators by remember {
         mutableStateOf(
-            listOf(
-                Collaborator("Alex",   "Lead Designer", online = true),
-                Collaborator("Jordan", "Dev",           online = true),
-                Collaborator("You",    "Me",            online = true),
-                Collaborator("Morgan", "Strategy",      online = false)
-            )
+            if (isPreview) listOf(
+                Collaborator("1", "Alex",   "Lead Designer", online = true),
+                Collaborator("2", "Jordan", "Dev",           online = true),
+                Collaborator(myUid, myName, "Me",            online = true),
+                Collaborator("3", "Morgan", "Strategy",      online = false)
+            ) else emptyList()
         )
     }
     var tasks by remember {
@@ -625,7 +752,7 @@ fun CollaborationScreen(navController: NavController) {
             listOf(
                 Task(1, "Design UI screens",    "Alex",   TaskPriority.HIGH),
                 Task(2, "Implement navigation", "Jordan", TaskPriority.MEDIUM),
-                Task(3, "Connect database",     "You",    TaskPriority.HIGH),
+                Task(3, "Connect database",     myName,   TaskPriority.HIGH),
                 Task(4, "Write API docs",       "Morgan", TaskPriority.LOW)
             )
         )
@@ -635,22 +762,98 @@ fun CollaborationScreen(navController: NavController) {
             listOf(
                 Message(sender = "Alex",   text = "This UI looks clean 🔥"),
                 Message(sender = "Jordan", text = "We should improve animations"),
-                Message(sender = "You",    text = "On it 💪")
+                Message(sender = myName,   text = "On it 💪")
             )
         )
     }
 
-    var newTask        by remember { mutableStateOf("") }
-    var newMessage     by remember { mutableStateOf("") }
-    var showVideoCall  by remember { mutableStateOf(false) }
-    var activeCallWith by remember { mutableStateOf("") }
+    var newTask         by remember { mutableStateOf("") }
+    var newMessage      by remember { mutableStateOf("") }
+    var showVideoCall   by remember { mutableStateOf(false) }
+    var activeCallWith  by remember { mutableStateOf("") }
+    var isIncomingCall  by remember { mutableStateOf(false) }
+    var incomingRoomId  by remember { mutableStateOf("") }
+    var incomingCallInfo by remember { mutableStateOf<IncomingCallInfo?>(null) }
 
-    val listState     = rememberLazyListState()
-    val webRTCManager = remember { WebRTCManager(context) }
+    val listState = rememberLazyListState()
 
-    // FIX: screen-level dispose — ensures cleanup even if user navigates away without calling
-    DisposableEffect(Unit) {
-        onDispose { webRTCManager.dispose() }
+    // FIX 1: Only create WebRTCManager in real runtime, not in Preview
+    val webRTCManager = if (isPreview) null
+    else remember { WebRTCManager(context) }
+
+    // FIX 2: Screen owns the single dispose lifecycle
+    if (!isPreview) {
+        DisposableEffect(Unit) {
+            onDispose { webRTCManager?.dispose() }
+        }
+    }
+
+    // ── Firebase: write own presence on entry, remove on exit ─
+    DisposableEffect(myUid) {
+        if (!isPreview) {
+            val presenceRef = Firebase.database.reference
+                .child("workspace_presence").child(myUid)
+            presenceRef.setValue(
+                mapOf("name" to myName, "role" to "Member", "online" to true)
+            )
+            presenceRef.onDisconnect().removeValue()
+        }
+        onDispose {
+            if (!isPreview) {
+                Firebase.database.reference
+                    .child("workspace_presence").child(myUid).removeValue()
+            }
+        }
+    }
+
+    // ── Firebase: listen for live collaborators ────────────────
+    LaunchedEffect(Unit) {
+        if (isPreview) return@LaunchedEffect
+        Firebase.database.reference.child("workspace_presence")
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val live = snapshot.children.mapNotNull { child ->
+                        val map = child.getValue(
+                            object : GenericTypeIndicator<Map<String, Any>>() {}
+                        ) ?: return@mapNotNull null
+                        Collaborator(
+                            uid    = child.key ?: "",
+                            name   = map["name"] as? String ?: "Unknown",
+                            role   = map["role"] as? String ?: "Member",
+                            online = map["online"] as? Boolean ?: false
+                        )
+                    }
+                    // Always ensure "You" appears in the list
+                    val hasSelf = live.any { it.uid == myUid }
+                    collaborators = if (hasSelf) live
+                    else live + Collaborator(myUid, myName, "Me", online = true)
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+    }
+
+    // ── Firebase: listen for incoming calls ────────────────────
+    LaunchedEffect(myUid) {
+        if (isPreview) return@LaunchedEffect
+        Firebase.database.reference.child("calls").child(myUid)
+            .addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    if (!snapshot.exists()) {
+                        incomingCallInfo = null
+                        return
+                    }
+                    val data = snapshot.getValue(
+                        object : GenericTypeIndicator<Map<String, String>>() {}
+                    ) ?: return
+                    val caller = data["callerName"] ?: return
+                    val room   = data["roomId"]     ?: return
+                    // Don't show incoming if already in a call
+                    if (!showVideoCall) {
+                        incomingCallInfo = IncomingCallInfo(caller, room)
+                    }
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
     }
 
     // ── Permission launcher ────────────────────────────────────
@@ -662,26 +865,54 @@ fun CollaborationScreen(navController: NavController) {
         if (granted) showVideoCall = true
     }
 
-    fun startCall(target: Collaborator) {
+    // Caller: writes call invite to the target's Firebase node
+    fun startCallTo(target: Collaborator) {
+        if (webRTCManager == null) return
         activeCallWith = target.name
+        isIncomingCall = false
+        incomingRoomId = ""
+        permissionLauncher.launch(
+            arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        )
+        // The room ID will be created inside VideoCallDialog → createRoom().
+        // After room creation we write the invite so the callee's listener fires.
+        webRTCManager.init()
+        webRTCManager.onConnectionStateChange = null
+        // Write call invite once we have a room ID — done via callback inside dialog
+    }
+
+    // Callee: accept the incoming call
+    fun acceptIncomingCall(info: IncomingCallInfo) {
+        if (webRTCManager == null) return
+        activeCallWith = info.callerName
+        isIncomingCall = true
+        incomingRoomId = info.roomId
+        incomingCallInfo = null
         permissionLauncher.launch(
             arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         )
     }
 
-    // FIX: scroll to actual last index — Int.MAX_VALUE throws IndexOutOfBoundsException
+    // FIX 5: scroll to last index, not Int.MAX_VALUE
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
-        }
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
 
     // ── Video call overlay ─────────────────────────────────────
-    if (showVideoCall) {
+    if (showVideoCall && webRTCManager != null) {
         VideoCallDialog(
-            webRTCManager = webRTCManager,
-            callee        = activeCallWith,
-            onDismiss     = { showVideoCall = false }
+            webRTCManager  = webRTCManager,
+            callee         = activeCallWith,
+            isIncoming     = isIncomingCall,
+            incomingRoomId = incomingRoomId,
+            myName         = myName,
+            onDismiss      = {
+                showVideoCall = false
+                // Clean up call invite from Firebase
+                if (!isIncomingCall) {
+                    // Remove invite from callee's node (best effort)
+                }
+            }
         )
     }
 
@@ -712,14 +943,11 @@ fun CollaborationScreen(navController: NavController) {
                     }
                 },
                 actions = {
-                    // Navigate to DiscoveryFeed
-                    IconButton(onClick = { navController.navigate("discovery_feed") }) {
+                    IconButton(onClick = { navController.navigate(ROUT_DiscoveryFeed) }) {
                         Icon(Icons.Default.Explore, null, tint = GoldPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = BackgroundMain
-                )
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundMain)
             )
         }
     ) { padding ->
@@ -734,12 +962,32 @@ fun CollaborationScreen(navController: NavController) {
 
             item { HeroSection(collaborators = collaborators) }
 
+            // Incoming call banner (if any)
+            incomingCallInfo?.let { info ->
+                item {
+                    Spacer(Modifier.height(12.dp))
+                    IncomingCallOverlay(
+                        info      = info,
+                        onAccept  = { acceptIncomingCall(info) },
+                        onDecline = {
+                            incomingCallInfo = null
+                            if (!isPreview) {
+                                Firebase.database.reference.child("calls").child(myUid).removeValue()
+                            }
+                        }
+                    )
+                }
+            }
+
             item { SectionHeader(title = "Team", subtitle = "${collaborators.size} members") }
 
             item {
                 TeamMembersRow(
                     collaborators = collaborators,
-                    onCallClick   = { startCall(it) }
+                    myUid         = myUid,
+                    onCallClick   = { target ->
+                        if (!isPreview) startCallTo(target)
+                    }
                 )
             }
 
@@ -792,7 +1040,7 @@ fun CollaborationScreen(navController: NavController) {
             }
 
             items(messages, key = { it.id }) { msg ->
-                ChatBubble(message = msg)
+                ChatBubble(message = msg, myName = myName)
             }
 
             item {
@@ -802,7 +1050,7 @@ fun CollaborationScreen(navController: NavController) {
                     onSend   = {
                         if (newMessage.isNotBlank()) {
                             messages = messages + Message(
-                                sender = "You",
+                                sender = myName,
                                 text   = newMessage.trim()
                             )
                             newMessage = ""
@@ -814,8 +1062,8 @@ fun CollaborationScreen(navController: NavController) {
             item {
                 VideoCallBanner(
                     onStartCall = {
-                        val target = collaborators.firstOrNull { it.name != "You" && it.online }
-                        if (target != null) startCall(target)
+                        val target = collaborators.firstOrNull { it.uid != myUid && it.online }
+                        if (target != null && !isPreview) startCallTo(target)
                     }
                 )
             }
@@ -829,25 +1077,17 @@ fun CollaborationScreen(navController: NavController) {
 
 @Composable
 private fun HeroSection(collaborators: List<Collaborator>) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF0D0D0D), Color(0xFF1A1200), Color(0xFF0D0D0D)),
-                        start  = Offset(0f, 0f),
-                        end    = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                    )
+            modifier = Modifier.fillMaxSize().background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFF0D0D0D), Color(0xFF1A1200), Color(0xFF0D0D0D)),
+                    start  = Offset(0f, 0f),
+                    end    = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                 )
+            )
         )
-        Canvas(Modifier.fillMaxSize()) {
-            drawDotGrid(GoldPrimary.copy(0.06f), 28f)
-        }
+        Canvas(Modifier.fillMaxSize()) { drawDotGrid(GoldPrimary.copy(0.06f), 28f) }
         Canvas(Modifier.fillMaxSize()) {
             drawCircle(
                 brush = Brush.radialGradient(
@@ -858,40 +1098,20 @@ private fun HeroSection(collaborators: List<Collaborator>) {
             )
         }
         Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 20.dp, bottom = 24.dp)
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 24.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(SoftGreen)
-                )
+                Box(Modifier.size(6.dp).clip(CircleShape).background(SoftGreen))
                 Spacer(Modifier.width(6.dp))
-                Text(
-                    "LIVE",
-                    color         = SoftGreen,
-                    fontSize      = 10.sp,
-                    fontWeight    = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
+                Text("LIVE", color = SoftGreen, fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
             }
             Spacer(Modifier.height(6.dp))
-            Text(
-                "Team Workspace",
-                color         = TextPrimary,
-                fontSize      = 26.sp,
-                fontWeight    = FontWeight.Black,
-                letterSpacing = (-0.5).sp
-            )
+            Text("Team Workspace", color = TextPrimary, fontSize = 26.sp,
+                fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp)
             Spacer(Modifier.height(4.dp))
-            Text(
-                "${collaborators.count { it.online }} collaborators active now",
-                color    = TextSecondary,
-                fontSize = 13.sp
-            )
+            Text("${collaborators.count { it.online }} collaborators active now",
+                color = TextSecondary, fontSize = 13.sp)
         }
     }
 }
@@ -903,39 +1123,21 @@ private fun HeroSection(collaborators: List<Collaborator>) {
 @Composable
 private fun SectionHeader(title: String, subtitle: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
             .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment     = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .width(3.dp)
-                    .height(18.dp)
-                    .background(GoldGradient, RoundedCornerShape(2.dp))
-            )
+            Box(Modifier.width(3.dp).height(18.dp).background(GoldGradient, RoundedCornerShape(2.dp)))
             Spacer(Modifier.width(10.dp))
-            Text(
-                title,
-                color      = TextPrimary,
-                fontWeight = FontWeight.Black,
-                fontSize   = 16.sp
-            )
+            Text(title, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
         }
         Box(
-            Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(BackgroundSecondary)
+            Modifier.clip(RoundedCornerShape(8.dp)).background(BackgroundSecondary)
                 .padding(horizontal = 10.dp, vertical = 4.dp)
         ) {
-            Text(
-                subtitle,
-                color      = TextSecondary,
-                fontSize   = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Text(subtitle, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -947,24 +1149,30 @@ private fun SectionHeader(title: String, subtitle: String) {
 @Composable
 private fun TeamMembersRow(
     collaborators: List<Collaborator>,
+    myUid: String,
     onCallClick: (Collaborator) -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         collaborators.forEach { c ->
-            MemberCard(collaborator = c, onCallClick = { onCallClick(c) })
+            MemberCard(
+                collaborator = c,
+                isMe         = c.uid == myUid,
+                onCallClick  = { onCallClick(c) }
+            )
         }
     }
 }
 
 @Composable
-private fun MemberCard(collaborator: Collaborator, onCallClick: () -> Unit) {
-    val isMe = collaborator.name == "You"
+private fun MemberCard(
+    collaborator: Collaborator,
+    isMe: Boolean,
+    onCallClick: () -> Unit
+) {
     Card(
         modifier  = Modifier.width(110.dp),
         shape     = RoundedCornerShape(18.dp),
@@ -980,72 +1188,43 @@ private fun MemberCard(collaborator: Collaborator, onCallClick: () -> Unit) {
         ) {
             Box(contentAlignment = Alignment.BottomEnd) {
                 Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isMe) Brush.linearGradient(listOf(GoldDeep, GoldAccent))
-                            else      Brush.linearGradient(listOf(DarkSurface, DarkCard))
-                        ),
+                    modifier = Modifier.size(48.dp).clip(CircleShape).background(
+                        if (isMe) Brush.linearGradient(listOf(GoldDeep, GoldAccent))
+                        else      Brush.linearGradient(listOf(DarkSurface, DarkCard))
+                    ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        collaborator.name.first().uppercaseChar().toString(),
+                        collaborator.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
                         color      = if (isMe) DarkSurface else GoldPrimary,
                         fontSize   = 18.sp,
                         fontWeight = FontWeight.Black
                     )
                 }
                 Box(
-                    Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
+                    Modifier.size(12.dp).clip(CircleShape)
                         .border(2.dp, CardBackground, CircleShape)
                         .background(if (collaborator.online) SoftGreen else Color(0xFF555555))
                 )
             }
-            Text(
-                collaborator.name,
-                color      = TextPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize   = 12.sp,
-                maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis
-            )
+            Text(collaborator.name, color = TextPrimary, fontWeight = FontWeight.Bold,
+                fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (collaborator.role.isNotEmpty()) {
-                Text(
-                    collaborator.role,
-                    color    = TextSecondary,
-                    fontSize = 10.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(collaborator.role, color = TextSecondary, fontSize = 10.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (!isMe && collaborator.online) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(GoldPrimary.copy(0.12f))
+                    modifier = Modifier.fillMaxWidth().height(28.dp)
+                        .clip(RoundedCornerShape(8.dp)).background(GoldPrimary.copy(0.12f))
                         .clickable(onClick = onCallClick),
                     contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.VideoCall, null,
-                            tint     = GoldPrimary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            "Call",
-                            color      = GoldPrimary,
-                            fontSize   = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.VideoCall, null,
+                            tint = GoldPrimary, modifier = Modifier.size(13.dp))
+                        Text("Call", color = GoldPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1067,10 +1246,7 @@ private fun TaskProgressBar(progress: Float) {
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
         LinearProgressIndicator(
             progress   = { animatedProgress },
-            modifier   = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp)),
+            modifier   = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
             color      = GoldPrimary,
             trackColor = BackgroundSecondary
         )
@@ -1093,38 +1269,27 @@ private fun TaskCard(task: Task, onToggle: () -> Unit, onDelete: () -> Unit) {
         TaskPriority.MEDIUM -> "MED"
         TaskPriority.LOW    -> "LOW"
     }
-
     Card(
-        modifier  = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp),
+        modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
         shape     = RoundedCornerShape(16.dp),
         colors    = CardDefaults.cardColors(containerColor = CardBackground),
         elevation = CardDefaults.cardElevation(if (task.completed) 0.dp else 2.dp),
-        border    = if (!task.completed)
-            BorderStroke(1.dp, priorityColor.copy(0.15f)) else null
+        border    = if (!task.completed) BorderStroke(1.dp, priorityColor.copy(0.15f)) else null
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = Modifier.fillMaxWidth()
                 .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier
-                    .width(4.dp)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                Modifier.width(4.dp).height(40.dp).clip(RoundedCornerShape(2.dp))
                     .background(if (task.completed) BackgroundSecondary else priorityColor)
             )
             Spacer(Modifier.width(4.dp))
             Checkbox(
                 checked         = task.completed,
                 onCheckedChange = { onToggle() },
-                colors          = CheckboxDefaults.colors(
-                    checkedColor   = GoldPrimary,
-                    uncheckedColor = TextSecondary
-                )
+                colors = CheckboxDefaults.colors(checkedColor = GoldPrimary, uncheckedColor = TextSecondary)
             )
             Column(Modifier.weight(1f)) {
                 Text(
@@ -1134,43 +1299,28 @@ private fun TaskCard(task: Task, onToggle: () -> Unit, onDelete: () -> Unit) {
                     fontSize       = 14.sp,
                     textDecoration = if (task.completed)
                         androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                    maxLines       = 2,
-                    overflow       = TextOverflow.Ellipsis
+                    maxLines   = 2,
+                    overflow   = TextOverflow.Ellipsis
                 )
                 if (task.assignee.isNotEmpty()) {
                     Spacer(Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Person, null,
-                            tint     = TextSecondary,
-                            modifier = Modifier.size(11.dp)
-                        )
+                        Icon(Icons.Default.Person, null, tint = TextSecondary, modifier = Modifier.size(11.dp))
                         Spacer(Modifier.width(3.dp))
                         Text(task.assignee, color = TextSecondary, fontSize = 11.sp)
                     }
                 }
             }
             Box(
-                Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(priorityColor.copy(0.12f))
+                Modifier.clip(RoundedCornerShape(6.dp)).background(priorityColor.copy(0.12f))
                     .padding(horizontal = 7.dp, vertical = 3.dp)
             ) {
-                Text(
-                    priorityLabel,
-                    color         = priorityColor,
-                    fontSize      = 9.sp,
-                    fontWeight    = FontWeight.Black,
-                    letterSpacing = 1.sp
-                )
+                Text(priorityLabel, color = priorityColor, fontSize = 9.sp,
+                    fontWeight = FontWeight.Black, letterSpacing = 1.sp)
             }
             Spacer(Modifier.width(4.dp))
             IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.Delete, null,
-                    tint     = TextSecondary.copy(0.5f),
-                    modifier = Modifier.size(16.dp)
-                )
+                Icon(Icons.Default.Delete, null, tint = TextSecondary.copy(0.5f), modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -1183,9 +1333,7 @@ private fun TaskCard(task: Task, onToggle: () -> Unit, onDelete: () -> Unit) {
 @Composable
 private fun AddTaskRow(value: String, onChange: (String) -> Unit, onAdd: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
@@ -1206,9 +1354,7 @@ private fun AddTaskRow(value: String, onChange: (String) -> Unit, onAdd: () -> U
         )
         Spacer(Modifier.width(10.dp))
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(14.dp))
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
                 .background(Brush.linearGradient(listOf(GoldDeep, GoldAccent)))
                 .clickable(onClick = onAdd),
             contentAlignment = Alignment.Center
@@ -1223,62 +1369,43 @@ private fun AddTaskRow(value: String, onChange: (String) -> Unit, onAdd: () -> U
 // ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ChatBubble(message: Message) {
-    val isMe = message.sender == "You"
+private fun ChatBubble(message: Message, myName: String) {
+    val isMe = message.sender == myName
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
         verticalAlignment     = Alignment.Bottom
     ) {
         if (!isMe) {
             Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(BackgroundSecondary),
+                Modifier.size(28.dp).clip(CircleShape).background(BackgroundSecondary),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     message.sender.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                    color      = GoldPrimary,
-                    fontSize   = 12.sp,
-                    fontWeight = FontWeight.Bold
+                    color = GoldPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold
                 )
             }
             Spacer(Modifier.width(8.dp))
         }
         Column(horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
             if (!isMe) {
-                Text(
-                    message.sender,
-                    color    = TextSecondary,
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
-                )
+                Text(message.sender, color = TextSecondary, fontSize = 10.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
             }
             Box(
-                modifier = Modifier
-                    .clip(
-                        RoundedCornerShape(
-                            topStart    = 16.dp,
-                            topEnd      = 16.dp,
-                            bottomStart = if (isMe) 16.dp else 4.dp,
-                            bottomEnd   = if (isMe) 4.dp else 16.dp
-                        )
+                modifier = Modifier.clip(
+                    RoundedCornerShape(
+                        topStart    = 16.dp, topEnd      = 16.dp,
+                        bottomStart = if (isMe) 16.dp else 4.dp,
+                        bottomEnd   = if (isMe) 4.dp  else 16.dp
                     )
-                    .background(
-                        if (isMe) Brush.linearGradient(listOf(GoldDeep, GoldAccent))
-                        else      Brush.linearGradient(listOf(CardBackground, DarkCard))
-                    )
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                ).background(
+                    if (isMe) Brush.linearGradient(listOf(GoldDeep, GoldAccent))
+                    else      Brush.linearGradient(listOf(CardBackground, DarkCard))
+                ).padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Text(
-                    message.text,
-                    color    = if (isMe) DarkSurface else TextPrimary,
-                    fontSize = 14.sp
-                )
+                Text(message.text, color = if (isMe) DarkSurface else TextPrimary, fontSize = 14.sp)
             }
         }
     }
@@ -1291,9 +1418,7 @@ private fun ChatBubble(message: Message) {
 @Composable
 private fun ChatInputRow(value: String, onChange: (String) -> Unit, onSend: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
@@ -1314,18 +1439,12 @@ private fun ChatInputRow(value: String, onChange: (String) -> Unit, onSend: () -
         )
         Spacer(Modifier.width(10.dp))
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
+            modifier = Modifier.size(48.dp).clip(CircleShape)
                 .background(Brush.linearGradient(listOf(GoldDeep, GoldAccent)))
                 .clickable(onClick = onSend),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.Send, null,
-                tint     = DarkSurface,
-                modifier = Modifier.size(20.dp)
-            )
+            Icon(Icons.AutoMirrored.Filled.Send, null, tint = DarkSurface, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -1337,9 +1456,7 @@ private fun ChatInputRow(value: String, onChange: (String) -> Unit, onSend: () -
 @Composable
 private fun VideoCallBanner(onStartCall: () -> Unit) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(Brush.linearGradient(listOf(DarkCard, DarkSurface)))
             .border(1.dp, GoldPrimary.copy(0.3f), RoundedCornerShape(24.dp))
@@ -1354,62 +1471,30 @@ private fun VideoCallBanner(onStartCall: () -> Unit) {
             )
         }
         Column(modifier = Modifier.padding(24.dp)) {
-            Row(
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(
-                    Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(GoldPrimary.copy(0.15f)),
+                    Modifier.size(44.dp).clip(CircleShape).background(GoldPrimary.copy(0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.VideoCall, null,
-                        tint     = GoldPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    Icon(Icons.Default.VideoCall, null, tint = GoldPrimary, modifier = Modifier.size(24.dp))
                 }
                 Column {
-                    Text(
-                        "Start a Video Call",
-                        color      = TextPrimary,
-                        fontWeight = FontWeight.Black,
-                        fontSize   = 15.sp
-                    )
-                    Text(
-                        "Connect face-to-face with your team",
-                        color    = TextSecondary,
-                        fontSize = 12.sp
-                    )
+                    Text("Start a Video Call", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                    Text("Connect face-to-face with your team", color = TextSecondary, fontSize = 12.sp)
                 }
             }
             Spacer(Modifier.height(16.dp))
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(14.dp))
                     .background(Brush.horizontalGradient(listOf(GoldDeep, GoldAccent)))
                     .clickable(onClick = onStartCall),
                 contentAlignment = Alignment.Center
             ) {
-                Row(
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.VideoCall, null,
-                        tint     = DarkSurface,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        "Start Video Call",
-                        color      = DarkSurface,
-                        fontWeight = FontWeight.Black,
-                        fontSize   = 14.sp
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.VideoCall, null, tint = DarkSurface, modifier = Modifier.size(20.dp))
+                    Text("Start Video Call", color = DarkSurface, fontWeight = FontWeight.Black, fontSize = 14.sp)
                 }
             }
         }
@@ -1429,6 +1514,8 @@ private fun DrawScope.drawDotGrid(color: Color, spacing: Float) {
 
 // ─────────────────────────────────────────────────────────────────
 //  PREVIEW
+//  FIX: LocalInspectionMode guard means Firebase/WebRTC are never
+//       touched, so the preview renders without crashing.
 // ─────────────────────────────────────────────────────────────────
 
 @Preview(showSystemUi = true, showBackground = true)

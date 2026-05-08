@@ -19,6 +19,9 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.kennedy.forge.ui.theme.*
 import androidx.compose.ui.tooling.preview.Preview
+import com.kennedy.forge.navigation.ROUT_Payments
+import com.kennedy.forge.navigation.ROUT_Privacy
+import com.kennedy.forge.navigation.ROUT_Profile
 
 ///////////////////////////////////////////////////////////
 // MAIN SCREEN
@@ -73,7 +76,7 @@ fun SettingsScreen(navController: NavController) {
                     .fillMaxWidth()
                     .clickable {
                         if (hasProfile) {
-                            navController.navigate("public_profile")
+                            navController.navigate(ROUT_Profile)
                         } else {
                             navController.navigate("edit_profile") // onboarding
                         }
@@ -143,7 +146,7 @@ fun SettingsScreen(navController: NavController) {
                 title = "Privacy & Security",
                 icon = Icons.Default.Lock,
                 onClick = {
-                    navController.navigate("privacy")
+                    navController.navigate(ROUT_Privacy)
                 }
             )
 
@@ -154,7 +157,7 @@ fun SettingsScreen(navController: NavController) {
                 title = "Subscription",
                 icon = Icons.Default.Star,
                 onClick = {
-                    navController.navigate("payment")
+                    navController.navigate(ROUT_Payments)
                 }
             )
 

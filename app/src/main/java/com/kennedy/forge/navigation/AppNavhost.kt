@@ -21,7 +21,9 @@ import com.kennedy.forge.ui.screens.feedback.SubmitWorkScreen
 import com.kennedy.forge.ui.screens.feedback.ProjectDetailScreen
 import com.kennedy.forge.ui.screens.growth.GrowthInsightScreen
 import com.kennedy.forge.ui.screens.growth.PaymentScreen
+import com.kennedy.forge.ui.screens.growth.PrivacyScreen
 import com.kennedy.forge.ui.screens.growth.SecurityScreen
+import com.kennedy.forge.ui.screens.growth.SettingsScreen
 import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen1
 import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen2
 import com.kennedy.forge.ui.screens.onboarding.OnboardingScreen3
@@ -30,6 +32,7 @@ import com.kennedy.forge.ui.screens.onboarding.SkillAssessmentScreen
 import com.kennedy.forge.ui.screens.pitch.PitchViewScreen
 import com.kennedy.forge.ui.screens.portfolio.PortfolioBuilderScreen
 import com.kennedy.forge.ui.screens.profile.ProfileScreen
+import com.kennedy.forge.ui.screens.security.ChangePasswordScreen
 import com.kennedy.forge.ui.screens.splash.SplashScreen
 
 
@@ -129,6 +132,16 @@ fun AppNavHost(
         composable(ROUT_BlockDiagnosis ){
             BlockDiagnosisScreen(navController)
         }
+        composable(ROUT_Settings ){
+            SettingsScreen(navController)
+        }
+        composable(ROUT_Privacy ){
+            PrivacyScreen(navController)
+        }
+        composable(ROUT_ChangePassword ){
+            ChangePasswordScreen(navController)
+        }
+
 
     }
 

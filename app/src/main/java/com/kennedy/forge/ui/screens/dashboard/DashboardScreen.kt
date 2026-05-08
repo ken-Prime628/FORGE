@@ -47,6 +47,7 @@ import com.kennedy.forge.navigation.ROUT_PortfolioBuilder
 import com.kennedy.forge.navigation.ROUT_Profile
 import com.kennedy.forge.navigation.ROUT_ProfileSetup
 import com.kennedy.forge.navigation.ROUT_Search
+import com.kennedy.forge.navigation.ROUT_Settings
 import com.kennedy.forge.navigation.ROUT_SubmitWork
 
 // ─────────────────────────────────────────────────────────────────
@@ -73,16 +74,6 @@ data class Activity(
 
 // ─────────────────────────────────────────────────────────────────
 //  FIREBASE USER → User MODEL HELPER
-//
-//  Priority order for display name:
-//    1. Firebase Auth displayName  (set via Google Sign-In or updateProfile)
-//    2. Email prefix before '@'    (covers email/password registrations)
-//    3. Phone number               (covers phone auth)
-//    4. Fallback "User"
-//
-//  Priority order for avatar:
-//    1. Firebase Auth photoUrl     (Google/Facebook profile photo)
-//    2. null → initials shown instead
 // ─────────────────────────────────────────────────────────────────
 private fun FirebaseUser.toUser(): User {
     val displayName = this.displayName
@@ -107,7 +98,6 @@ fun DashboardScreen(navController: NavController) {
 
     val isPreview = LocalInspectionMode.current
 
-    // ── Resolve real Firebase user; fall back gracefully in Preview ──
     val firebaseUser = if (isPreview) null else Firebase.auth.currentUser
 
     var user by remember {
@@ -116,21 +106,17 @@ fun DashboardScreen(navController: NavController) {
         )
     }
 
-    // Re-sync whenever the Auth state changes (e.g. profile update mid-session)
     DisposableEffect(Unit) {
-        // 1. Declare the listener variable outside the if/else
         var listener: FirebaseAuth.AuthStateListener? = null
 
         if (isPreview) {
-            onDispose { /* Nothing to clean up */ }
+            onDispose { }
         } else {
-            // 2. Initialize it here
             listener = FirebaseAuth.AuthStateListener { auth ->
                 user = auth.currentUser?.toUser() ?: User(name = "User", avatarUri = null)
             }
             Firebase.auth.addAuthStateListener(listener!!)
 
-            // 3. The onDispose can now safely see 'listener'
             onDispose {
                 listener?.let { Firebase.auth.removeAuthStateListener(it) }
             }
@@ -161,6 +147,7 @@ fun DashboardScreen(navController: NavController) {
                 user            = user,
                 onSearch        = { navController.navigate(ROUT_Search) },
                 onNotifications = { navController.navigate(ROUT_Notification) },
+                onSettings      = { navController.navigate(ROUT_Settings) },
                 onAvatarClick   = goToProfile
             )
         },
@@ -274,7 +261,7 @@ fun CollaborationBanner(onClick: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  TOP BAR — unchanged
+//  TOP BAR — settings icon added to actions
 // ─────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -282,6 +269,7 @@ fun DashboardTopBar(
     user:            User,
     onSearch:        () -> Unit,
     onNotifications: () -> Unit,
+    onSettings:      () -> Unit,
     onAvatarClick:   () -> Unit
 ) {
     CenterAlignedTopAppBar(
@@ -306,11 +294,13 @@ fun DashboardTopBar(
             UserAvatar(user = user, onAvatarClick = onAvatarClick)
         },
         actions = {
+            // Search
             IconButton(onClick = onSearch) {
                 Box(Modifier.size(36.dp).clip(CircleShape).background(BackgroundSecondary), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Search, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                 }
             }
+            // Notifications
             IconButton(onClick = onNotifications) {
                 Box(Modifier.size(36.dp).clip(CircleShape).background(BackgroundSecondary), contentAlignment = Alignment.Center) {
                     Box(Modifier.fillMaxSize()) {
@@ -319,15 +309,19 @@ fun DashboardTopBar(
                     }
                 }
             }
+            // Settings — new icon
+            IconButton(onClick = onSettings) {
+                Box(Modifier.size(36.dp).clip(CircleShape).background(BackgroundSecondary), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Settings, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                }
+            }
         },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = BackgroundMain)
     )
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  USER AVATAR
-//  Shows profile photo if available, otherwise shows the first
-//  letter of the resolved display name — driven by Firebase Auth.
+//  USER AVATAR — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 fun UserAvatar(user: User, onAvatarClick: () -> Unit) {
@@ -341,7 +335,6 @@ fun UserAvatar(user: User, onAvatarClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         if (!user.avatarUri.isNullOrBlank()) {
-            // Google / Facebook profile photo
             AsyncImage(
                 model              = user.avatarUri,
                 contentDescription = "Profile",
@@ -349,7 +342,6 @@ fun UserAvatar(user: User, onAvatarClick: () -> Unit) {
                 contentScale       = ContentScale.Crop
             )
         } else {
-            // Initial derived from whatever name Firebase returned
             Text(
                 text  = user.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
                 style = MaterialTheme.typography.titleSmall.copy(

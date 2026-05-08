@@ -25,4 +25,8 @@ const val ROUT_Security= "Security"
 const val ROUT_GrowthInsight= "GrowthInsight"
 const val ROUT_PortfolioBuilder= "PortfolioBuilder"
 const val ROUT_BlockDiagnosis= "BlockDiagnosis"
+const val ROUT_Settings= "Settings"
+
+const val ROUT_Privacy= "Privacy"
+const val ROUT_ChangePassword= "ChangePassword"
 

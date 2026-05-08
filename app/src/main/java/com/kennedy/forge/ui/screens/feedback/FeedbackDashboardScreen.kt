@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.kennedy.forge.navigation.ROUT_Dashboard
+import com.kennedy.forge.navigation.ROUT_Profile
+import com.kennedy.forge.navigation.ROUT_SubmitWork
 
 // ─── Colour Tokens ───────────────────────────────────────────────────────────
 
@@ -726,7 +729,7 @@ fun FeedbackBottomNav(navController: NavController, modifier: Modifier = Modifie
                 selected = false,
                 modifier = Modifier.weight(1f),
                 onClick  = {
-                    navController.navigate("dashboard") {
+                    navController.navigate(ROUT_Dashboard) {
                         popUpTo("dashboard") { inclusive = true }
                     }
                 }
@@ -736,7 +739,7 @@ fun FeedbackBottomNav(navController: NavController, modifier: Modifier = Modifie
                 label    = "Submit",
                 selected = false,
                 modifier = Modifier.weight(1f),
-                onClick  = { navController.navigate("submit_work") }
+                onClick  = { navController.navigate(ROUT_SubmitWork) }
             )
             FeedNavItem(
                 icon     = Icons.Default.ChatBubble,
@@ -750,7 +753,7 @@ fun FeedbackBottomNav(navController: NavController, modifier: Modifier = Modifie
                 label    = "Profile",
                 selected = false,
                 modifier = Modifier.weight(1f),
-                onClick  = { navController.navigate("profile") }
+                onClick  = { navController.navigate(ROUT_Profile) }
             )
         }
     }

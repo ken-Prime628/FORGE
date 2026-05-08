@@ -41,6 +41,7 @@ import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.database.database
@@ -68,8 +69,8 @@ import androidx.compose.ui.tooling.preview.Preview
 // ─────────────────────────────────────────────
 
 private object CloudinaryConfig {
-    const val CLOUD_NAME    = "dv4sidtxo"      // ← replace with your real cloud name
-    const val UPLOAD_PRESET = "forge_portfolio"   // ← replace with your real upload preset
+    const val CLOUD_NAME    = "dv4sidtxo"
+    const val UPLOAD_PRESET = "forge_portfolio"
     val UPLOAD_URL get() = "https://api.cloudinary.com/v1_1/$CLOUD_NAME/image/upload"
 }
 
@@ -92,14 +93,16 @@ data class Achievement(
     val color: Color
 )
 
+// FIX 5 — @JvmField ensures Firebase reflection-based deserialisation works
+// reliably for every field, especially avatarUrl which came back null before.
 data class UserProfile(
-    val uid: String        = "",
-    val name: String       = "",
-    val profession: String = "",
-    val category: String   = "",
-    val bio: String        = "",
-    val avatarUrl: String  = "",
-    val updatedAt: Long    = System.currentTimeMillis()
+    @JvmField val uid:        String = "",
+    @JvmField val name:       String = "",
+    @JvmField val profession: String = "",
+    @JvmField val category:   String = "",
+    @JvmField val bio:        String = "",
+    @JvmField val avatarUrl:  String = "",
+    @JvmField val updatedAt:  Long   = System.currentTimeMillis()
 )
 
 // ─────────────────────────────────────────────
@@ -165,25 +168,22 @@ suspend fun uploadAvatarToCloudinary(context: Context, imageUri: Uri): Result<St
         }
     }
 
+// FIX 2 — always refresh updatedAt on every save
 suspend fun saveProfileToDatabase(profile: UserProfile): Result<Unit> = runCatching {
+    val fresh = profile.copy(updatedAt = System.currentTimeMillis())
     Firebase.database.reference
-        .child("users").child(profile.uid).child("profile")
-        .setValue(profile).await()
+        .child("users").child(fresh.uid).child("profile")
+        .setValue(fresh).await()
 }
 
+// FIX 1 — use getValue(UserProfile::class.java) so Firebase maps every field
+// correctly instead of reading each child manually (which missed avatarUrl etc.)
 suspend fun loadProfileFromDatabase(uid: String): Result<UserProfile> = runCatching {
     val snap = Firebase.database.reference
         .child("users").child(uid).child("profile")
         .get().await()
-    UserProfile(
-        uid        = snap.child("uid").getValue(String::class.java)        ?: uid,
-        name       = snap.child("name").getValue(String::class.java)       ?: "",
-        profession = snap.child("profession").getValue(String::class.java) ?: "",
-        category   = snap.child("category").getValue(String::class.java)   ?: "",
-        bio        = snap.child("bio").getValue(String::class.java)        ?: "",
-        avatarUrl  = snap.child("avatarUrl").getValue(String::class.java)  ?: "",
-        updatedAt  = snap.child("updatedAt").getValue(Long::class.java)    ?: System.currentTimeMillis()
-    )
+    snap.getValue(UserProfile::class.java)
+        ?: UserProfile(uid = uid)
 }
 
 // ─────────────────────────────────────────────
@@ -202,6 +202,9 @@ fun ProfileScreen(navController: NavController) {
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf("") }
 
+    // FIX 3 — increment after every successful save to bust Coil's cache
+    var avatarRevision by remember { mutableIntStateOf(0) }
+
     // ── Edit-sheet state ──────────────────────────────────────────
     var showUpdateSheet    by remember { mutableStateOf(false) }
     var editName           by remember { mutableStateOf("") }
@@ -219,11 +222,6 @@ fun ProfileScreen(navController: NavController) {
     val userProjects = demoProjects
     val totalLikes   = userProjects.sumOf { it.likes }
 
-    // ── FIX: camera URI is null until the user actually taps camera ──
-    // Previously, FileProvider.getUriForFile() ran immediately on first
-    // composition — before the screen even rendered — causing a crash if
-    // the <provider> authority didn't match or the manifest was missing it.
-    // Now we create the URI lazily, only at the moment the camera launches.
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -236,7 +234,6 @@ fun ProfileScreen(navController: NavController) {
         ActivityResultContracts.GetContent()
     ) { uri: Uri? -> uri?.let { editAvatarUri = it } }
 
-    // Helper called when user taps "Take a photo"
     fun launchCamera() {
         val file = File(context.cacheDir, "forge_avatar_${System.currentTimeMillis()}.jpg")
         val uri  = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
@@ -246,7 +243,6 @@ fun ProfileScreen(navController: NavController) {
 
     // ── Load profile on first composition ────────────────────────
     LaunchedEffect(Unit) {
-        // Firebase auth token may not be ready instantly — retry once
         val uid = Firebase.auth.currentUser?.uid
             ?: run {
                 kotlinx.coroutines.delay(500)
@@ -254,7 +250,6 @@ fun ProfileScreen(navController: NavController) {
             }
 
         if (uid == null) {
-            // User is not signed in — go back safely instead of showing blank screen
             navController.navigate(ROUT_Dashboard) {
                 popUpTo(ROUT_Dashboard) { inclusive = false }
                 launchSingleTop = true
@@ -320,6 +315,7 @@ fun ProfileScreen(navController: NavController) {
                 onSuccess = {
                     withContext(Dispatchers.Main) {
                         profile         = updated
+                        avatarRevision += 1   // FIX 3 — force Coil to reload avatar
                         isSaving        = false
                         showUpdateSheet = false
                     }
@@ -426,7 +422,8 @@ fun ProfileScreen(navController: NavController) {
                     modifier       = Modifier.fillMaxSize().padding(padding),
                     contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
-                    item { HeroSection(profile = profile) }
+                    // FIX 3 — pass avatarRevision so HeroSection re-renders after save
+                    item { HeroSection(profile = profile, avatarRevision = avatarRevision) }
                     item { StatsRow(projects = userProjects.size, likes = totalLikes, reviews = 18) }
                     item { AchievementsRow(achievements = demoAchievements) }
                     item {
@@ -460,6 +457,7 @@ fun ProfileScreen(navController: NavController) {
             bio                = editBio,
             avatarUri          = editAvatarUri,
             currentAvatarUrl   = profile.avatarUrl,
+            avatarRevision     = avatarRevision,         // FIX 6
             isSaving           = isSaving,
             saveError          = saveError,
             showValidationHint = showValidationHint,
@@ -477,7 +475,6 @@ fun ProfileScreen(navController: NavController) {
     if (showPhotoPicker) {
         PhotoPickerSheet(
             onDismiss = { showPhotoPicker = false },
-            // ── FIX: camera URI created here lazily, NOT at composition time ──
             onCamera  = { showPhotoPicker = false; launchCamera() },
             onGallery = { showPhotoPicker = false; galleryLauncher.launch("image/*") },
             onRemove  = if (editAvatarUri != null) {
@@ -527,8 +524,9 @@ fun BottomNavItem(
 // HERO SECTION
 // ─────────────────────────────────────────────
 
+// FIX 4 — accepts avatarRevision to build a unique Coil cache key after each save
 @Composable
-fun HeroSection(profile: UserProfile) {
+fun HeroSection(profile: UserProfile, avatarRevision: Int = 0) {
     Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
         Box(
             modifier = Modifier
@@ -560,8 +558,14 @@ fun HeroSection(profile: UserProfile) {
                 contentAlignment = Alignment.Center
             ) {
                 if (profile.avatarUrl.isNotBlank()) {
+                    // FIX 4 — cache key includes revision so Coil re-fetches after save
                     AsyncImage(
-                        model              = profile.avatarUrl,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(profile.avatarUrl)
+                            .memoryCacheKey("${profile.avatarUrl}_$avatarRevision")
+                            .diskCacheKey("${profile.avatarUrl}_$avatarRevision")
+                            .crossfade(true)
+                            .build(),
                         contentDescription = "Avatar",
                         contentScale       = ContentScale.Crop,
                         modifier           = Modifier.fillMaxSize().clip(CircleShape)
@@ -775,6 +779,7 @@ fun EmptyProjectsPlaceholder(onAdd: () -> Unit) {
 fun UpdateProfileSheet(
     name: String, profession: String, category: String, bio: String,
     avatarUri: Uri?, currentAvatarUrl: String,
+    avatarRevision: Int = 0,                                          // FIX 6
     isSaving: Boolean, saveError: String, showValidationHint: Boolean, isFormValid: Boolean,
     onNameChange: (String) -> Unit, onProfChange: (String) -> Unit,
     onCatChange:  (String) -> Unit, onBioChange:  (String) -> Unit,
@@ -831,7 +836,13 @@ fun UpdateProfileSheet(
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        SheetAvatarPicker(avatarUri = avatarUri, currentAvatarUrl = currentAvatarUrl, onPickPhoto = onPickPhoto)
+                        // FIX 6 — pass avatarRevision so picker shows fresh avatar
+                        SheetAvatarPicker(
+                            avatarUri        = avatarUri,
+                            currentAvatarUrl = currentAvatarUrl,
+                            avatarRevision   = avatarRevision,
+                            onPickPhoto      = onPickPhoto
+                        )
                     }
                     Spacer(Modifier.height(24.dp))
                     Card(
@@ -888,8 +899,14 @@ fun UpdateProfileSheet(
 // SHEET AVATAR PICKER
 // ─────────────────────────────────────────────
 
+// FIX 6 — avatarRevision param busts Coil cache for the current avatar preview
 @Composable
-fun SheetAvatarPicker(avatarUri: Uri?, currentAvatarUrl: String, onPickPhoto: () -> Unit) {
+fun SheetAvatarPicker(
+    avatarUri: Uri?,
+    currentAvatarUrl: String,
+    avatarRevision: Int = 0,
+    onPickPhoto: () -> Unit
+) {
     val scaleAnim by animateFloatAsState(
         targetValue   = if (avatarUri != null) 1.05f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -906,8 +923,24 @@ fun SheetAvatarPicker(avatarUri: Uri?, currentAvatarUrl: String, onPickPhoto: ()
             contentAlignment = Alignment.Center
         ) {
             when {
-                avatarUri != null          -> AsyncImage(model = avatarUri,        contentDescription = "New photo",     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
-                currentAvatarUrl.isNotBlank() -> AsyncImage(model = currentAvatarUrl, contentDescription = "Current photo", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(CircleShape))
+                avatarUri != null -> AsyncImage(
+                    model              = avatarUri,
+                    contentDescription = "New photo",
+                    contentScale       = ContentScale.Crop,
+                    modifier           = Modifier.fillMaxSize().clip(CircleShape)
+                )
+                currentAvatarUrl.isNotBlank() -> AsyncImage(
+                    // FIX 6 — cache-bust so the sheet reflects the latest saved avatar
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(currentAvatarUrl)
+                        .memoryCacheKey("${currentAvatarUrl}_$avatarRevision")
+                        .diskCacheKey("${currentAvatarUrl}_$avatarRevision")
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Current photo",
+                    contentScale       = ContentScale.Crop,
+                    modifier           = Modifier.fillMaxSize().clip(CircleShape)
+                )
                 else -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.CameraAlt, null, tint = GoldPrimary, modifier = Modifier.size(24.dp))

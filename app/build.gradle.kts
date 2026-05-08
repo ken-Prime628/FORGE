@@ -71,7 +71,20 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.2.0")
 
            // already needed for AsyncImage
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")   // Cloudinary HTTP upload
+    implementation("com.squareup.okhttp3:okhttp:4.12.0") // Cloudinary HTTP upload
+
+    // Icons + UI
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material3:material3:1.2.0")
+
+    // WebRTC — maintained drop-in for org.webrtc:google-webrtc (same package names)
+    implementation("io.getstream:stream-webrtc-android:1.1.2")
+
+    // Accompanist permissions (camera/mic request helper)
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+
+
 
 
 

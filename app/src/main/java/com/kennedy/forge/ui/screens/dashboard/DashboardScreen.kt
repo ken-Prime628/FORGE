@@ -30,6 +30,7 @@ import com.kennedy.forge.R
 import com.kennedy.forge.ui.theme.*
 import androidx.compose.ui.tooling.preview.Preview
 import com.kennedy.forge.navigation.ROUT_BlockDiagnosis
+import com.kennedy.forge.navigation.ROUT_Collaboration
 import com.kennedy.forge.navigation.ROUT_Dashboard
 import com.kennedy.forge.navigation.ROUT_DiscoveryFeed
 import com.kennedy.forge.navigation.ROUT_FeedbackDashboard
@@ -74,10 +75,9 @@ fun DashboardScreen(navController: NavController) {
 
     val tools = listOf(
         Tool("FeedbackLoop",   "Get honest reviews",  R.drawable.tool_feedback,  ROUT_SubmitWork,       Color(0xFF185FA5)),
-        Tool("BlockBreaker",   "Diagnose your block", R.drawable.tool_blocks,
-            ROUT_BlockDiagnosis,   Color(0xFF993C1D)),
+        Tool("BlockBreaker",   "Diagnose your block", R.drawable.tool_blocks,    ROUT_BlockDiagnosis,   Color(0xFF993C1D)),
         Tool("PortfolioTruth", "Optimise your work",  R.drawable.tool_portfolio, ROUT_PortfolioBuilder, Color(0xFF0F6E56)),
-        Tool("PitchMirror",    "Practise your pitch", R.drawable.tool_pitch,     ROUT_PitchView, Color(0xFF854F0B)),
+        Tool("PitchMirror",    "Practise your pitch", R.drawable.tool_pitch,     ROUT_PitchView,        Color(0xFF854F0B)),
     )
 
     val activities = listOf(
@@ -88,8 +88,6 @@ fun DashboardScreen(navController: NavController) {
         Activity("Source flagged",       "2 restricted references", Icons.Default.Folder,     Color(0xFF3B6D11), "2d ago",    ROUT_GrowthInsight),
     )
 
-    // ── single helper so every profile nav goes through one place ──────────
-    // If ROUT_ProfileSetup constant ever changes, only this line needs updating.
     val goToProfile: () -> Unit = { navController.navigate(ROUT_ProfileSetup) }
 
     Scaffold(
@@ -99,7 +97,7 @@ fun DashboardScreen(navController: NavController) {
                 user            = user,
                 onSearch        = { navController.navigate(ROUT_Search) },
                 onNotifications = { navController.navigate(ROUT_Notification) },
-                onAvatarClick   = goToProfile   // K circle top-left → ProfileSetupScreen
+                onAvatarClick   = goToProfile
             )
         },
         bottomBar = { ForgeBottomNavigation(navController) }
@@ -113,8 +111,8 @@ fun DashboardScreen(navController: NavController) {
 
             item {
                 HeroGreetingCard(
-                    user          = user,
-                    onStreakClick = { navController.navigate("growth_insights") }
+                    user         = user,
+                    onStreakClick = { navController.navigate(ROUT_GrowthInsight) }
                 )
             }
 
@@ -129,6 +127,9 @@ fun DashboardScreen(navController: NavController) {
 
             item { ProExposureBanner(navController) }
             item { SubmitWorkCTA(navController) }
+
+            // ✅ NEW — Collaboration banner, sits right after SubmitWorkCTA
+            item { CollaborationBanner(onClick = { navController.navigate(ROUT_Collaboration) }) }
 
             item {
                 DashSectionHeader(
@@ -157,7 +158,91 @@ fun DashboardScreen(navController: NavController) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  TOP BAR
+//  ✅ COLLABORATION BANNER — new, navigates to "collaboration"
+// ─────────────────────────────────────────────────────────────────
+@Composable
+fun CollaborationBanner(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFF1A2340), Color(0xFF0F1A30))
+                )
+            )
+            .border(
+                0.5.dp,
+                Brush.linearGradient(listOf(SoftBlue.copy(alpha = 0.5f), GoldPrimary.copy(alpha = 0.3f))),
+                RoundedCornerShape(20.dp)
+            )
+            .clickable { onClick() }
+            .padding(18.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+
+            // Icon badge
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SoftBlue.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Group,
+                    contentDescription = null,
+                    tint     = SoftBlue,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Find Collaborators",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        color      = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 14.sp
+                    )
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Connect with creators, find partners & build together",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color      = Color.White.copy(alpha = 0.55f),
+                        fontSize   = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                )
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            // Arrow
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(SoftBlue.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.ArrowForward,
+                    contentDescription = null,
+                    tint     = SoftBlue,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  TOP BAR — unchanged
 // ─────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,24 +250,15 @@ fun DashboardTopBar(
     user:            User,
     onSearch:        () -> Unit,
     onNotifications: () -> Unit,
-    onAvatarClick:   () -> Unit   // K circle → ProfileSetupScreen
+    onAvatarClick:   () -> Unit
 ) {
     CenterAlignedTopAppBar(
         title = {
-            Row(
-                verticalAlignment    = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(
-                    modifier         = Modifier.size(26.dp).clip(RoundedCornerShape(7.dp)).background(GoldGradient),
-                    contentAlignment = Alignment.Center
-                ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(modifier = Modifier.size(26.dp).clip(RoundedCornerShape(7.dp)).background(GoldGradient), contentAlignment = Alignment.Center) {
                     Text("F", style = MaterialTheme.typography.labelLarge.copy(color = DarkSurface, fontWeight = FontWeight.W700))
                 }
-                Text(
-                    "Forge",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.W600, color = TextPrimary, letterSpacing = (-0.3).sp)
-                )
+                Text("Forge", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.W600, color = TextPrimary, letterSpacing = (-0.3).sp))
             }
         },
         navigationIcon = {
@@ -199,10 +275,7 @@ fun DashboardTopBar(
                 Box(Modifier.size(36.dp).clip(CircleShape).background(BackgroundSecondary), contentAlignment = Alignment.Center) {
                     Box(Modifier.fillMaxSize()) {
                         Icon(Icons.Default.Notifications, null, tint = TextPrimary, modifier = Modifier.size(18.dp).align(Alignment.Center))
-                        Box(
-                            Modifier.size(7.dp).align(Alignment.TopEnd).offset((-4).dp, 4.dp)
-                                .clip(CircleShape).background(Error).border(1.5.dp, BackgroundSecondary, CircleShape)
-                        )
+                        Box(Modifier.size(7.dp).align(Alignment.TopEnd).offset((-4).dp, 4.dp).clip(CircleShape).background(Error).border(1.5.dp, BackgroundSecondary, CircleShape))
                     }
                 }
             }
@@ -212,63 +285,38 @@ fun DashboardTopBar(
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  USER AVATAR  — tapping the K circle navigates to ProfileSetupScreen
+//  USER AVATAR — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 fun UserAvatar(user: User, onAvatarClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .padding(start = 12.dp)
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(GoldGradient)
-            .clickable { onAvatarClick() },   // ← K tap → ProfileSetupScreen
+        modifier = Modifier.padding(start = 12.dp).size(36.dp).clip(CircleShape).background(GoldGradient).clickable { onAvatarClick() },
         contentAlignment = Alignment.Center
     ) {
         if (user.avatarUri != null) {
-            AsyncImage(
-                model              = user.avatarUri,
-                contentDescription = "Profile",
-                modifier           = Modifier.fillMaxSize(),
-                contentScale       = ContentScale.Crop
-            )
+            AsyncImage(model = user.avatarUri, contentDescription = "Profile", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
-            Text(
-                user.name.first().toString(),
-                style = MaterialTheme.typography.titleSmall.copy(color = DarkSurface, fontWeight = FontWeight.W700)
-            )
+            Text(user.name.first().toString(), style = MaterialTheme.typography.titleSmall.copy(color = DarkSurface, fontWeight = FontWeight.W700))
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  HERO GREETING CARD
+//  HERO GREETING CARD — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 private fun HeroGreetingCard(user: User, onStreakClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .height(186.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .shadow(8.dp, RoundedCornerShape(28.dp))
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+            .height(186.dp).clip(RoundedCornerShape(28.dp)).shadow(8.dp, RoundedCornerShape(28.dp))
     ) {
-        androidx.compose.foundation.Image(
-            painter = painterResource(id = R.drawable.hero_bg), contentDescription = null,
-            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
-        )
+        androidx.compose.foundation.Image(painter = painterResource(id = R.drawable.hero_bg), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.25f), Color.Black.copy(alpha = 0.72f)))))
         Canvas(Modifier.fillMaxSize()) {
             drawCircle(brush = Brush.radialGradient(colors = listOf(GoldPrimary.copy(alpha = 0.18f), Color.Transparent), center = Offset(size.width * 0.85f, size.height * 0.15f), radius = size.width * 0.5f))
         }
         Column(modifier = Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            Surface(
-                shape    = RoundedCornerShape(20.dp),
-                color    = GoldPrimary.copy(alpha = 0.20f),
-                border   = BorderStroke(0.5.dp, GoldPrimary.copy(alpha = 0.5f)),
-                modifier = Modifier.clickable { onStreakClick() }   // streak → growth_insights
-            ) {
+            Surface(shape = RoundedCornerShape(20.dp), color = GoldPrimary.copy(alpha = 0.20f), border = BorderStroke(0.5.dp, GoldPrimary.copy(alpha = 0.5f)), modifier = Modifier.clickable { onStreakClick() }) {
                 Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Icon(Icons.Default.Whatshot, null, tint = GoldAccent, modifier = Modifier.size(14.dp))
                     Text("12 day streak", style = MaterialTheme.typography.labelSmall.copy(color = GoldAccent, fontWeight = FontWeight.W500, letterSpacing = 0.3.sp))
@@ -284,14 +332,13 @@ private fun HeroGreetingCard(user: User, onStreakClick: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  STATS STRIP
+//  STATS STRIP — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 private fun StatsStrip(onReviewsClick: () -> Unit, onViewsClick: () -> Unit, onPitchClick: () -> Unit, onBlockFreeClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp)).background(DarkSurface).padding(horizontal = 20.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically
     ) {
         StatItem("3",   "Pending\nreviews",  GoldAccent,  onClick = onReviewsClick)
         VerticalDivider(modifier = Modifier.height(36.dp), color = Color.White.copy(alpha = 0.08f))
@@ -312,7 +359,7 @@ private fun StatItem(value: String, label: String, color: Color, onClick: () -> 
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  PRO EXPOSURE BANNER
+//  PRO EXPOSURE BANNER — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 private fun ProExposureBanner(navController: NavController) {
@@ -332,9 +379,7 @@ private fun ProExposureBanner(navController: NavController) {
                 Text("You were spotted 12× this week — upgrade to Elite for client matching", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary, lineHeight = 16.sp))
             }
             Spacer(Modifier.width(10.dp))
-            Box(modifier = Modifier.height(34.dp).clip(RoundedCornerShape(10.dp)).background(GoldGradient).clickable { navController.navigate(
-                ROUT_Payments
-            ) }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.height(34.dp).clip(RoundedCornerShape(10.dp)).background(GoldGradient).clickable { navController.navigate(ROUT_Payments) }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                 Text("Upgrade", style = MaterialTheme.typography.labelMedium.copy(color = DarkSurface, fontWeight = FontWeight.W700))
             }
         }
@@ -342,7 +387,7 @@ private fun ProExposureBanner(navController: NavController) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  SUBMIT WORK CTA
+//  SUBMIT WORK CTA — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 fun SubmitWorkCTA(navController: NavController) {
@@ -362,7 +407,7 @@ fun SubmitWorkCTA(navController: NavController) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  SECTION HEADER
+//  SECTION HEADER — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 fun DashSectionHeader(title: String, action: String, onAction: () -> Unit) {
@@ -376,7 +421,7 @@ fun DashSectionHeader(title: String, action: String, onAction: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  CREATIVE TOOLS ROW
+//  CREATIVE TOOLS ROW — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 fun CreativeToolsRow(tools: List<Tool>, navController: NavController) {
@@ -407,7 +452,7 @@ private fun ToolCard(tool: Tool, onClick: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  ACTIVITY CARD
+//  ACTIVITY CARD — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 private fun ActivityCard(activity: Activity, onClick: () -> Unit) {
@@ -433,7 +478,7 @@ private fun ActivityCard(activity: Activity, onClick: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  BOTTOM NAVIGATION
+//  BOTTOM NAVIGATION — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Composable
 fun ForgeBottomNavigation(navController: NavController) {
@@ -470,13 +515,13 @@ fun ForgeBottomNavigation(navController: NavController) {
             icon = { Icon(Icons.Default.Person, null) },
             label = { Text("Profile", style = MaterialTheme.typography.labelSmall) },
             selected = false,
-            onClick = { navController.navigate(ROUT_ProfileSetup) }   // bottom Profile → ProfileSetupScreen
+            onClick = { navController.navigate(ROUT_ProfileSetup) }
         )
     }
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  CANVAS HELPER
+//  CANVAS HELPER — unchanged
 // ─────────────────────────────────────────────────────────────────
 private fun DrawScope.drawDotGrid(color: Color, spacing: Float, radius: Float) {
     val cols = (size.width / spacing).toInt() + 2
@@ -486,7 +531,7 @@ private fun DrawScope.drawDotGrid(color: Color, spacing: Float, radius: Float) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-//  PREVIEW
+//  PREVIEW — unchanged
 // ─────────────────────────────────────────────────────────────────
 @Preview(showSystemUi = true)
 @Composable

@@ -57,6 +57,7 @@ import coil.compose.AsyncImage
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.database.*
+import com.kennedy.forge.navigation.ROUT_PitchView
 import com.kennedy.forge.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -453,7 +454,7 @@ fun PortfolioBuilderScreen(navController: NavController) {
                         PortfolioTab.PREVIEW -> PreviewTabContent(
                             meta         = meta,
                             items        = items,
-                            onPitchClick = { navController.navigate("scenario_selector") }
+                            onPitchClick = { navController.navigate(ROUT_PitchView) }
                         )
                     }
                 }

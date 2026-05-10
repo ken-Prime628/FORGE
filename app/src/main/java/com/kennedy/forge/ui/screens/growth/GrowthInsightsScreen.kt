@@ -32,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.kennedy.forge.navigation.ROUT_FeedbackDashboard
+import com.kennedy.forge.navigation.ROUT_Payments
+import com.kennedy.forge.navigation.ROUT_SubmitWork
 import com.kennedy.forge.ui.theme.*
 import kotlin.math.cos
 import kotlin.math.min
@@ -146,7 +149,7 @@ fun GrowthInsightScreen(navController: NavController) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { navController.navigate("payment") }) {
+                    IconButton(onClick = { navController.navigate(ROUT_Payments) }) {
                         Icon(Icons.Default.WorkspacePremium, null, tint = GoldPrimary)
                     }
                 },
@@ -461,21 +464,21 @@ private fun OverviewContent(navController: NavController) {
                 label   = "Upload Work",
                 color   = GoldPrimary,
                 modifier = Modifier.weight(1f),
-                onClick = { navController.navigate("upload") }
+                onClick = { navController.navigate(ROUT_SubmitWork) }
             )
             QuickActionCard(
                 icon    = Icons.Default.Forum,
                 label   = "Give Feedback",
                 color   = SoftBlue,
                 modifier = Modifier.weight(1f),
-                onClick = { navController.navigate("feedback") }
+                onClick = { navController.navigate(ROUT_FeedbackDashboard) }
             )
             QuickActionCard(
                 icon    = Icons.Default.WorkspacePremium,
                 label   = "Upgrade",
                 color   = SoftPeach,
                 modifier = Modifier.weight(1f),
-                onClick = { navController.navigate("payment") }
+                onClick = { navController.navigate(ROUT_Payments) }
             )
         }
 
@@ -885,7 +888,7 @@ private fun ActivityContent(navController: NavController) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(Brush.horizontalGradient(listOf(GoldDeep, GoldAccent)))
-                .clickable { navController.navigate("upload") }
+                .clickable { navController.navigate(ROUT_SubmitWork) }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {

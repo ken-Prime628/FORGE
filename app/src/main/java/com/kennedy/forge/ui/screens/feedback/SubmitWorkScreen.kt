@@ -45,6 +45,7 @@ import com.google.firebase.database.database
 import com.kennedy.forge.navigation.ROUT_Dashboard
 import com.kennedy.forge.navigation.ROUT_FeedbackDashboard
 import com.kennedy.forge.navigation.ROUT_Profile
+import com.kennedy.forge.navigation.ROUT_ProjectDetail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -601,7 +602,9 @@ fun SubmitWorkScreen(navController: NavController) {
                         work      = work,
                         onEdit    = { editingWork = it },
                         onDelete  = { showDeleteConfirm = it },
-                        onView    = { navController.navigate("feedback_view/${it.id}") }
+                        onView    = {
+                            WorkDetailState.selectedWork = it   // ← pass the tapped Work
+                            navController.navigate(ROUT_ProjectDetail) }
                     )
                 }
             }

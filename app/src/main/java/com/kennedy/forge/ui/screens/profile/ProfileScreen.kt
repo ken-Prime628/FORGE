@@ -62,6 +62,7 @@ import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.tooling.preview.Preview
+import com.kennedy.forge.navigation.ROUT_FeedbackDashboard
 
 // ─────────────────────────────────────────────
 //  CLOUDINARY CONFIG
@@ -477,7 +478,7 @@ fun ProfileScreen(navController: NavController) {
                             WorkCard(
                                 work     = work,
                                 onEdit   = { navController.navigate(ROUT_SubmitWork) },  // navigate to submit screen in edit mode
-                                onView   = { navController.navigate("feedback_dashboard") }
+                                onView   = { navController.navigate(ROUT_FeedbackDashboard) }
                             )
                         }
                     }
